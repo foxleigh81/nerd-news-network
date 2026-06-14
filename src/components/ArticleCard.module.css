@@ -42,6 +42,37 @@
 .card:hover .img {
   transform: scale(1.04);
 }
+
+/* Play badge for video-derived articles. */
+.playBadge {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(225, 10, 20, 0.92);
+  color: #fff;
+  box-shadow: 0 4px 18px rgba(10, 10, 10, 0.35);
+  transition: transform 0.2s var(--ease), background 0.2s var(--ease);
+}
+.playBadge svg {
+  margin-left: 2px;
+}
+.card:hover .playBadge {
+  transform: scale(1.08);
+  background: var(--red);
+}
+.card[data-variant='compact'] .playBadge {
+  width: 34px;
+  height: 34px;
+}
+.card[data-variant='compact'] .playBadge svg {
+  width: 15px;
+  height: 15px;
+}
 .img[data-placeholder='true'] {
   background: repeating-linear-gradient(
     45deg,

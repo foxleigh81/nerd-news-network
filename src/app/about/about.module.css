@@ -13,3 +13,44 @@
 .body {
   max-width: 68ch;
 }
+
+.channels {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: clamp(1.25rem, 1rem + 1.5vw, 2rem);
+  max-width: 68ch;
+  margin-block: 1.6em;
+  padding: clamp(1.25rem, 1rem + 1vw, 1.75rem);
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.channelHeading {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--red-ink);
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line-2);
+}
+.channelList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.channelList a {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--step--1);
+  color: var(--ink);
+  text-decoration: none;
+  transition: color 0.15s var(--ease);
+}
+.channelList a:hover {
+  color: var(--red-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}

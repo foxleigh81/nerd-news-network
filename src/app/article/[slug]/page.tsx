@@ -63,6 +63,7 @@ export default async function ArticlePage({ params }: Params) {
   const canonical = `${SITE.url}/article/${article.slug}`;
 
   const hasSource = Boolean(article.source_url && article.source_name);
+  const isVideo = Boolean(article.video_youtube_id);
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -114,8 +115,24 @@ export default async function ArticlePage({ params }: Params) {
         <p className={styles.dek}>{article.blurb}</p>
       </header>
 
-      {/* Hero (full width, at the top) */}
-      {article.hero_image ? (
+      {/* Hero (full width, at the top). For video-derived articles, embed the
+          YouTube player in place of the hero image. */}
+      {article.video_youtube_id ? (
+        <figure className={styles.hero}>
+          <div className={styles.videoFrame}>
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${article.video_youtube_id}`}
+              title={article.headline}
+              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              loading="eager"
+            />
+          </div>
+          {article.source_name ? (
+            <figcaption className={styles.heroCredit}>Video: {article.source_name}</figcaption>
+          ) : null}
+        </figure>
+      ) : article.hero_image ? (
         <figure className={styles.hero}>
           <SmartImage
             src={article.hero_image}
@@ -146,10 +163,11 @@ export default async function ArticlePage({ params }: Params) {
             </p>
             {hasSource ? (
               <p className={styles.sourceLine}>
-                Originally reported by{' '}
+                {isVideo ? 'Based on the video by ' : 'Originally reported by '}
                 <a href={article.source_url!} target="_blank" rel="noopener noreferrer nofollow">
                   {article.source_name}
                 </a>
+                {isVideo ? ' on YouTube' : ''}
               </p>
             ) : null}
           </div>
@@ -168,10 +186,11 @@ export default async function ArticlePage({ params }: Params) {
           {/* Bottom source credit */}
           {hasSource ? (
             <aside className={styles.sourceCta}>
-              <p className={styles.sourceCtaLabel}>Read the full story</p>
+              <p className={styles.sourceCtaLabel}>{isVideo ? 'Watch the full video' : 'Read the full story'}</p>
               <p className={styles.sourceCtaText}>
-                This article summarises original reporting. Continue to the source for the complete
-                piece.
+                {isVideo
+                  ? 'This article summarises a YouTube video. Watch the full thing for everything in the creator’s own words.'
+                  : 'This article summarises original reporting. Continue to the source for the complete piece.'}
               </p>
               <a
                 className={styles.sourceCtaLink}
@@ -179,7 +198,7 @@ export default async function ArticlePage({ params }: Params) {
                 target="_blank"
                 rel="noopener noreferrer nofollow"
               >
-                Read at {article.source_name}
+                {isVideo ? `Watch on YouTube — ${article.source_name}` : `Read at ${article.source_name}`}
                 <IconArrow size={18} />
               </a>
             </aside>

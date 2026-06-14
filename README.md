@@ -91,7 +91,9 @@ to INSERT/UPDATE rows** — it should never need to change the schema. Dates are
 | `category_id`     |   ★      | FK → `categories.id`                                             |
 | `author`          |    ✓     | Byline (defaults to `NNN Staff`)                                |
 | `source_name`     |   ★      | Original publisher name (aggregation credit)                    |
-| `source_url`      |   ★      | Original article URL — rendered in the byline and closing credit|
+| `source_url`      |   ★      | Original article/video URL — rendered in the byline and closing credit |
+| `video_youtube_id`|          | If set, the article is built from a YouTube video; the player is embedded at the top of the page (see YouTube section) |
+| `video_duration_seconds` |   | Video length; used to keep the feed long-form only (exclude Shorts) and to show runtime |
 | `reading_minutes` |          | Optional; auto-estimated from `body` if omitted                 |
 | `featured`        |          | `1` marks the lead story for its page                           |
 | `published_at`    |    ✓     | ISO 8601 UTC; drives the front page, archive and ordering       |
@@ -121,6 +123,43 @@ Bodies may embed media pulled from the original article:
 The renderer also allows headings (h2–h4), lists, blockquotes, tables, `code`/
 `pre`, and links (external links automatically open in a new tab with
 `rel="noopener noreferrer"`). Everything else is stripped.
+
+### `youtube_channels` (video sources the daily task monitors)
+
+A curated list of YouTube channels per category. The seed ships four per
+section (Smart Homes includes **Foxy's Lab** and **Paul Hibbert**). The list is
+surfaced on the `/about` page under "Channels we follow".
+
+| Column        | Notes                                                            |
+| ------------- | --------------------------------------------------------------- |
+| `name`        | Channel display name                                            |
+| `handle`      | `@handle` (nullable)                                            |
+| `channel_id`  | `UC…` id for the RSS/API feed (nullable; resolvable from handle)|
+| `url`         | Channel URL (unique)                                            |
+| `category_id` | FK → `categories.id`                                            |
+| `active`      | `1` = monitor, `0` = paused/skip                                |
+
+**The daily video-to-article flow** the task should implement:
+
+1. For each `active` channel, read its uploads feed
+   (`https://www.youtube.com/feeds/videos.xml?channel_id=<channel_id>`) and find
+   videos published in the last day or two.
+2. Skip any whose video id already appears in `articles.video_youtube_id` (the
+   dedupe key) so the same video is never written twice.
+3. **Exclude Shorts — the feed is long-form only.** Skip vertical/short videos
+   (e.g. duration under ~60 seconds). The channel RSS feed has no duration, so
+   detect this via the YouTube Data API (`contentDetails.duration`) or by
+   checking whether `https://www.youtube.com/shorts/<id>` stays on `/shorts`
+   (a Short) versus redirecting to `/watch` (long-form). Store the length in
+   `video_duration_seconds`.
+4. For a new video, fetch the transcript and write a cliff-notes `body` from it
+   (same format as above), set `video_youtube_id`, `source_name` (the channel),
+   `source_url` (the watch URL) and `category_id`, and insert the article.
+
+When `video_youtube_id` is set the article page embeds the player at the top in
+place of the hero image, the card shows a play badge, and the byline/credit read
+"Based on the video by … on YouTube" / "Watch on YouTube". The card thumbnail
+uses the YouTube thumbnail (`i.ytimg.com/vi/<id>/…`) automatically.
 
 ### `related_articles` (curated sidebar links)
 

@@ -22,8 +22,8 @@ function db(): Database.Database {
 const ARTICLE_COLUMNS = `
   a.id, a.slug, a.headline, a.blurb, a.body, a.hero_image, a.hero_image_alt,
   a.hero_credit, a.thumbnail_image, a.thumbnail_alt, a.category_id, a.author,
-  a.source_name, a.source_url, a.reading_minutes, a.featured, a.published_at,
-  c.slug AS category_slug, c.name AS category_name
+  a.source_name, a.source_url, a.video_youtube_id, a.reading_minutes, a.featured,
+  a.published_at, c.slug AS category_slug, c.name AS category_name
 `;
 const FROM_ARTICLES = `FROM articles a LEFT JOIN categories c ON c.id = a.category_id`;
 
@@ -115,6 +115,20 @@ export function getCategories(): Category[] {
   // Ordered by insertion (see scripts/seed.mjs CATEGORIES) so the nav reflects
   // the intended section order rather than alphabetical.
   return db().prepare('SELECT id, slug, name, description FROM categories ORDER BY id ASC').all() as Category[];
+}
+
+/** Active monitored YouTube channels, grouped by category (insertion order). */
+export function getYoutubeChannels(): import('./types').YoutubeChannel[] {
+  return db()
+    .prepare(
+      `SELECT ch.id, ch.name, ch.handle, ch.channel_id, ch.url, ch.category_id, ch.active,
+              c.slug AS category_slug, c.name AS category_name
+       FROM youtube_channels ch
+       LEFT JOIN categories c ON c.id = ch.category_id
+       WHERE ch.active = 1
+       ORDER BY ch.category_id ASC, ch.name ASC`
+    )
+    .all() as import('./types').YoutubeChannel[];
 }
 
 export function getCategoryBySlug(slug: string): Category | null {

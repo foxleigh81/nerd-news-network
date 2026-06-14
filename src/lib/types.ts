@@ -22,10 +22,24 @@ export interface Article {
   author: string;
   source_name: string | null;
   source_url: string | null;
+  video_youtube_id: string | null;
   reading_minutes: number | null;
   featured: number;
   published_at: string; // ISO 8601 UTC
   // Joined fields:
+  category_slug: string | null;
+  category_name: string | null;
+}
+
+export interface YoutubeChannel {
+  id: number;
+  name: string;
+  handle: string | null;
+  channel_id: string | null;
+  url: string;
+  category_id: number | null;
+  active: number;
+  // Joined:
   category_slug: string | null;
   category_name: string | null;
 }

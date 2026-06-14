@@ -57,7 +57,9 @@ db.exec(`
     category_id     INTEGER REFERENCES categories(id),
     author          TEXT NOT NULL DEFAULT 'NNN Staff',
     source_name     TEXT,                          -- original source (aggregation credit)
-    source_url      TEXT,                          -- original article URL (deep link)
+    source_url      TEXT,                          -- original article / video URL (deep link)
+    video_youtube_id TEXT,                         -- if set, the article is built from a YouTube video and embeds it at the top
+    video_duration_seconds INTEGER,                -- video length; used to exclude Shorts (long-form only) and show runtime
     reading_minutes INTEGER,                       -- optional precomputed read time
     featured        INTEGER NOT NULL DEFAULT 0,    -- 1 = lead story on its page
     published_at    TEXT NOT NULL,                 -- ISO 8601 UTC, e.g. 2026-06-14T09:30:00Z
@@ -77,12 +79,109 @@ db.exec(`
     position           INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (article_id, related_article_id)
   );
+
+  -- Curated YouTube channels the daily task monitors. For each channel it
+  -- checks for a video published in the last day or two, skips any whose
+  -- video_youtube_id already exists in articles, then turns new videos into
+  -- articles (transcript -> cliff-notes body, with the video embedded on top).
+  CREATE TABLE IF NOT EXISTS youtube_channels (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    handle      TEXT,                              -- @handle (nullable)
+    channel_id  TEXT,                              -- UC… id for the RSS/API feed (nullable; resolvable from handle)
+    url         TEXT NOT NULL UNIQUE,              -- channel URL
+    category_id INTEGER REFERENCES categories(id),
+    active      INTEGER NOT NULL DEFAULT 1         -- 0 = paused, skip during the daily run
+  );
 `);
+
+// Lightweight migration: ensure the video column exists on databases created
+// before it was added (CREATE TABLE IF NOT EXISTS won't add new columns).
+const articleCols = db.prepare('PRAGMA table_info(articles)').all().map((c) => c.name);
+if (!articleCols.includes('video_youtube_id')) {
+  db.exec('ALTER TABLE articles ADD COLUMN video_youtube_id TEXT');
+}
+if (!articleCols.includes('video_duration_seconds')) {
+  db.exec('ALTER TABLE articles ADD COLUMN video_duration_seconds INTEGER');
+}
+
+// ---------------------------------------------------------------------------
+// Curated YouTube channels (4 per category) the daily task monitors.
+// channel_id is the UC… id used by YouTube's per-channel RSS feed
+// (https://www.youtube.com/feeds/videos.xml?channel_id=…); where left null the
+// daily task can resolve it from the handle/url.
+// ---------------------------------------------------------------------------
+const CHANNELS = [
+  // AI
+  { name: 'Two Minute Papers', handle: '@TwoMinutePapers', channel_id: 'UCbfYPyITQ-7l4upoX8nvctg', url: 'https://www.youtube.com/@TwoMinutePapers', category: 'ai' },
+  { name: 'Yannic Kilcher', handle: '@YannicKilcher', channel_id: 'UCZHmQk67mSJgfCCTn7xBfew', url: 'https://www.youtube.com/@YannicKilcher', category: 'ai' },
+  { name: 'AI Explained', handle: '@aiexplained-official', channel_id: 'UCNJ1Ymd5yFuUPtn21xtRbbw', url: 'https://www.youtube.com/@aiexplained-official', category: 'ai' },
+  { name: 'Matt Wolfe', handle: '@mreflow', channel_id: null, url: 'https://www.youtube.com/@mreflow', category: 'ai' },
+
+  // Networking
+  { name: 'NetworkChuck', handle: '@NetworkChuck', channel_id: 'UC9x0AN7BWHpCDHSm9NiJFJQ', url: 'https://www.youtube.com/@NetworkChuck', category: 'networking' },
+  { name: 'Crosstalk Solutions', handle: '@CrosstalkSolutions', channel_id: 'UCVS6ejD9NLZvjsvhcbiDzjw', url: 'https://www.youtube.com/@CrosstalkSolutions', category: 'networking' },
+  { name: 'Lawrence Systems', handle: '@LawrenceSystems', channel_id: 'UCHkYOD-3fZbuGhwsADBd9ZQ', url: 'https://www.youtube.com/@LawrenceSystems', category: 'networking' },
+  { name: 'David Bombal', handle: '@davidbombal', channel_id: 'UCP7WmQ_U4GB3K51Od9QvM0w', url: 'https://www.youtube.com/@davidbombal', category: 'networking' },
+
+  // Smart Homes (Foxy's Lab and Paul Hibbert requested)
+  { name: "Foxy's Lab", handle: null, channel_id: 'UC_blM3yCdvOSzxakaj3178w', url: 'https://www.youtube.com/channel/UC_blM3yCdvOSzxakaj3178w', category: 'smart-homes' },
+  { name: 'Paul Hibbert', handle: '@paulhibbert', channel_id: 'UCYLnawaM-36HncBBUeWrlGA', url: 'https://www.youtube.com/@paulhibbert', category: 'smart-homes' },
+  { name: 'Smart Home Solver', handle: '@SmartHomeSolver', channel_id: null, url: 'https://www.youtube.com/@SmartHomeSolver', category: 'smart-homes' },
+  { name: 'Everything Smart Home', handle: '@EverythingSmartHome', channel_id: null, url: 'https://www.youtube.com/@EverythingSmartHome', category: 'smart-homes' },
+
+  // Gaming
+  { name: 'IGN', handle: '@IGN', channel_id: null, url: 'https://www.youtube.com/@IGN', category: 'gaming' },
+  { name: 'GameSpot', handle: '@gamespot', channel_id: 'UCbu2SsF-Or3Rsn3NxqODImw', url: 'https://www.youtube.com/@gamespot', category: 'gaming' },
+  { name: 'Digital Foundry', handle: '@DigitalFoundry', channel_id: 'UC9PBzalIcEQCsiIkq36PyUA', url: 'https://www.youtube.com/@DigitalFoundry', category: 'gaming' },
+  { name: 'GamesRadar', handle: '@gamesradar', channel_id: null, url: 'https://www.youtube.com/@gamesradar', category: 'gaming' },
+
+  // Science
+  { name: 'Veritasium', handle: '@veritasium', channel_id: 'UCHnyfMqiRRG1u-2MsSQLbXA', url: 'https://www.youtube.com/@veritasium', category: 'science' },
+  { name: 'Kurzgesagt – In a Nutshell', handle: '@kurzgesagt', channel_id: 'UCsXVk37bltHxD1rDPwtNM8Q', url: 'https://www.youtube.com/@kurzgesagt', category: 'science' },
+  { name: 'PBS Space Time', handle: '@pbsspacetime', channel_id: 'UC7_gcs09iThXybpVgjHZ_7g', url: 'https://www.youtube.com/@pbsspacetime', category: 'science' },
+  { name: 'Anton Petrov', handle: '@whatdamath', channel_id: 'UCciQ8wFcVoIIMi-lfu8-cjQ', url: 'https://www.youtube.com/@whatdamath', category: 'science' },
+
+  // Technology
+  { name: 'Marques Brownlee (MKBHD)', handle: '@mkbhd', channel_id: 'UCBJycsmduvYEL83R_U4JriQ', url: 'https://www.youtube.com/@mkbhd', category: 'technology' },
+  { name: 'Linus Tech Tips', handle: '@LinusTechTips', channel_id: 'UCXuqSBlHAE6Xw-yeJA0Tunw', url: 'https://www.youtube.com/@LinusTechTips', category: 'technology' },
+  { name: 'Dave2D', handle: '@Dave2D', channel_id: null, url: 'https://www.youtube.com/@Dave2D', category: 'technology' },
+  { name: 'TechLinked', handle: '@TechLinked', channel_id: 'UCeeFfhMcJa1kjtfZAGskOCA', url: 'https://www.youtube.com/@TechLinked', category: 'technology' },
+];
+
+const insertChannel = db.prepare(
+  `INSERT OR IGNORE INTO youtube_channels (name, handle, channel_id, url, category_id, active)
+   VALUES (@name, @handle, @channel_id, @url, @category_id, 1)`
+);
+function seedChannels(resolveCategoryId) {
+  const tx = db.transaction(() => {
+    for (const c of CHANNELS) {
+      insertChannel.run({
+        name: c.name,
+        handle: c.handle ?? null,
+        channel_id: c.channel_id ?? null,
+        url: c.url,
+        category_id: resolveCategoryId(c.category) ?? null,
+      });
+    }
+  });
+  tx();
+}
 
 const reset = process.argv.includes('--reset');
 const existing = db.prepare('SELECT COUNT(*) AS n FROM articles').get().n;
 
 if (existing > 0 && !reset) {
+  // Ensure the monitored-channel list is present even when article content
+  // already exists (e.g. a production DB gaining this feature for the first time).
+  const channelCount = db.prepare('SELECT COUNT(*) AS n FROM youtube_channels').get().n;
+  if (channelCount === 0) {
+    const catBySlug = Object.fromEntries(
+      db.prepare('SELECT slug, id FROM categories').all().map((c) => [c.slug, c.id])
+    );
+    seedChannels((slug) => catBySlug[slug]);
+    console.log(`[seed] Seeded ${CHANNELS.length} YouTube channels into existing database.`);
+  }
   console.log(
     `[seed] DB already has ${existing} article(s); schema ensured, leaving data untouched.`
   );
@@ -92,8 +191,8 @@ if (existing > 0 && !reset) {
 
 if (reset) {
   console.log('[seed] --reset: clearing existing content.');
-  db.exec('DELETE FROM related_articles; DELETE FROM articles; DELETE FROM categories;');
-  db.exec("DELETE FROM sqlite_sequence WHERE name IN ('articles','categories');");
+  db.exec('DELETE FROM related_articles; DELETE FROM articles; DELETE FROM youtube_channels; DELETE FROM categories;');
+  db.exec("DELETE FROM sqlite_sequence WHERE name IN ('articles','categories','youtube_channels');");
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +215,8 @@ for (const c of CATEGORIES) {
   const info = insertCategory.run(c);
   categoryIds[c.slug] = info.lastInsertRowid;
 }
+
+seedChannels((slug) => categoryIds[slug]);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -167,21 +268,34 @@ function buildBody({ intro, keyPoints, sections, video, sourceName }) {
 
 const S = (heading, ...paras) => ({ heading, paras });
 
-function article({ headline, blurb, category, source, sourceUrl, publishedAt, featured = 0, imageSeed, intro, keyPoints, sections, video, author = 'NNN Staff' }) {
+function article({ headline, blurb, category, source, sourceUrl, publishedAt, featured = 0, imageSeed, intro, keyPoints, sections, video, videoYoutubeId = null, videoDurationSeconds = null, author = 'NNN Staff' }) {
+  // Video-derived articles use the YouTube thumbnail as their card image and
+  // embed the player at the top of the page (see the article route).
+  const isVideo = Boolean(videoYoutubeId);
   return {
     slug: slugify(headline),
     headline,
     blurb,
     body: buildBody({ intro, keyPoints, sections, video, sourceName: source }),
-    hero_image: `https://picsum.photos/seed/nnn${imageSeed}/1280/720`,
-    hero_image_alt: `Placeholder illustration for the story “${headline}”.`,
-    hero_credit: 'Placeholder image — Picsum Photos',
-    thumbnail_image: `https://picsum.photos/seed/nnn${imageSeed}/640/360`,
-    thumbnail_alt: `Placeholder thumbnail for “${headline}”.`,
+    hero_image: isVideo
+      ? `https://i.ytimg.com/vi/${videoYoutubeId}/maxresdefault.jpg`
+      : `https://picsum.photos/seed/nnn${imageSeed}/1280/720`,
+    hero_image_alt: isVideo
+      ? `Video thumbnail for “${headline}”.`
+      : `Placeholder illustration for the story “${headline}”.`,
+    hero_credit: isVideo ? `Video: ${source}` : 'Placeholder image — Picsum Photos',
+    thumbnail_image: isVideo
+      ? `https://i.ytimg.com/vi/${videoYoutubeId}/hqdefault.jpg`
+      : `https://picsum.photos/seed/nnn${imageSeed}/640/360`,
+    thumbnail_alt: isVideo
+      ? `Video thumbnail for “${headline}”.`
+      : `Placeholder thumbnail for “${headline}”.`,
     category_id: categoryIds[category],
     author,
     source_name: source,
     source_url: sourceUrl,
+    video_youtube_id: videoYoutubeId,
+    video_duration_seconds: videoDurationSeconds,
     reading_minutes: 2 + (imageSeed % 3),
     featured,
     published_at: publishedAt,
@@ -920,6 +1034,252 @@ const ARTICLES = [
     ],
   }),
 
+  // ===================== VIDEO ARTICLES (latest video per channel) =====================
+  // Built from each channel's most recent upload (via its RSS feed). published_at
+  // is the video's real publish date; the summary is derived from the video's
+  // title and description (the daily task uses the full transcript).
+
+  // --- AI ---
+  article({
+    headline: 'DeepMind’s New AI Found a Strange New Way to Think',
+    blurb: 'Two Minute Papers breaks down DeepMind research on an AI that reasons in an unconventional way, departing from how traditional neural networks behave.',
+    category: 'ai', source: 'Two Minute Papers',
+    sourceUrl: 'https://www.youtube.com/watch?v=Dkqzqw8rxXI', videoYoutubeId: 'Dkqzqw8rxXI',
+    publishedAt: '2026-06-05T15:50:26Z', imageSeed: 80,
+    intro: 'Two Minute Papers digs into new DeepMind research describing an AI that appears to reason in an unusual, unexpected way. Watch the full breakdown above; the highlights are below.',
+    keyPoints: [
+      'Covers a DeepMind model showing unconventional reasoning patterns, unlike typical neural-network behaviour.',
+      'Walks through the research paper and what the findings could mean for AI capabilities.',
+      'Explains why this approach to machine “thinking” is being treated as notable.',
+    ],
+  }),
+  article({
+    headline: 'Yannic Kilcher Builds a “Fully Automatic Mansplainer”',
+    blurb: 'A tongue-in-cheek build video in which Yannic Kilcher creates an AI that automatically generates unsolicited, over-explained answers.',
+    category: 'ai', source: 'Yannic Kilcher',
+    sourceUrl: 'https://www.youtube.com/watch?v=xHi8PUIVyoo', videoYoutubeId: 'xHi8PUIVyoo',
+    publishedAt: '2026-03-06T22:07:33Z', imageSeed: 81,
+    intro: 'Yannic Kilcher’s latest is a comedic engineering project — an AI that automatically produces condescending explanations. The description is light on detail; here’s the gist (watch above for the full thing).',
+    keyPoints: [
+      'A humorous build: an AI “mansplainer” that churns out unsolicited, over-explained answers.',
+      'Framed as a fun ML side-project rather than a serious tool.',
+    ],
+  }),
+  article({
+    headline: 'AI Explained Breaks Down Anthropic’s Claude Fable 5 — All 319 Pages',
+    blurb: 'AI Explained works through the 319-page system card for Anthropic’s new Claude Fable 5, pulling out 20+ findings on benchmarks, behaviour and how it compares with OpenAI.',
+    category: 'ai', source: 'AI Explained',
+    sourceUrl: 'https://www.youtube.com/watch?v=haK1KoQWm18', videoYoutubeId: 'haK1KoQWm18',
+    publishedAt: '2026-06-10T18:43:12Z', imageSeed: 82,
+    intro: 'AI Explained goes deep on Anthropic’s newly released Claude Fable 5, working through its 319-page system card. Watch the full analysis above — here’s what stood out.',
+    keyPoints: [
+      'More than 20 takeaways from the system card, spanning performance benchmarks and ML-acceleration results.',
+      'Notes on the model’s creative-writing ability and some concerning patterns in its reasoning.',
+      'Compares Anthropic’s approach with OpenAI’s competitive response.',
+    ],
+  }),
+
+  // --- Networking ---
+  article({
+    headline: 'NetworkChuck’s Live CCNA AMA Kicks Off the “Summer of CCNA”',
+    blurb: 'A 90-minute live Q&A on networking certifications, part of NetworkChuck’s Summer of CCNA program.',
+    category: 'networking', source: 'NetworkChuck',
+    sourceUrl: 'https://www.youtube.com/watch?v=W-uDWefB-6c', videoYoutubeId: 'W-uDWefB-6c',
+    publishedAt: '2026-06-04T22:51:50Z', imageSeed: 83,
+    intro: 'NetworkChuck hosted a live AMA on networking certifications as part of his “Summer of CCNA” push. Watch the session above; here’s the shape of it.',
+    keyPoints: [
+      'A roughly 90-minute live Q&A focused on CCNA and networking certification questions.',
+      'Tied to the channel’s “Summer of CCNA” learning program.',
+    ],
+  }),
+  article({
+    headline: 'Meshtastic vs MeshCore: Comparing Off-Grid Mesh Networking for Project NOMAD',
+    blurb: 'Crosstalk Solutions weighs Meshtastic against MeshCore — including running a local LLM over 915 MHz radio with no internet.',
+    category: 'networking', source: 'Crosstalk Solutions',
+    sourceUrl: 'https://www.youtube.com/watch?v=diLqra5atsk', videoYoutubeId: 'diLqra5atsk',
+    publishedAt: '2026-06-10T19:10:19Z', imageSeed: 84,
+    intro: 'Crosstalk Solutions compares two off-grid mesh networking protocols — Meshtastic and MeshCore — for its Project NOMAD build. Watch the full comparison above; the highlights are below.',
+    keyPoints: [
+      'Project NOMAD will support both Meshtastic and MeshCore so users can pick what suits them.',
+      'A standout demo: connecting Meshtastic’s API to a local language model for offline AI assistance over 915 MHz radio.',
+      'Aimed at remote scenarios with no internet connectivity.',
+    ],
+  }),
+  article({
+    headline: 'Firewalls, Security and Homelab Virtualization: Lawrence Systems’ Weekly Q&A',
+    blurb: 'A wide-ranging homelab Q&A covering firewall configuration, security best practices and virtualization.',
+    category: 'networking', source: 'Lawrence Systems',
+    sourceUrl: 'https://www.youtube.com/watch?v=8Ch_GhkMhao', videoYoutubeId: '8Ch_GhkMhao',
+    publishedAt: '2026-06-11T21:33:04Z', imageSeed: 85,
+    intro: 'In the latest VLOG Thursday, Lawrence Systems answers viewer questions across firewalls, security and virtualization. Full episode above; key threads below.',
+    keyPoints: [
+      'Viewer Q&A spanning firewall configuration, security practices and virtualization for homelabs.',
+      'Also touches on upcoming content changes for the channel.',
+    ],
+  }),
+  article({
+    headline: 'What Is SNORT? A Look at the Free, Open-Source Intrusion Detection System',
+    blurb: 'David Bombal explains SNORT, Cisco’s free open-source IDS, and how SNORT/SnortML skills can boost a cybersecurity career.',
+    category: 'networking', source: 'David Bombal',
+    sourceUrl: 'https://www.youtube.com/watch?v=xpHErlGtgJc', videoYoutubeId: 'xpHErlGtgJc',
+    publishedAt: '2026-06-12T20:00:13Z', imageSeed: 86,
+    intro: 'David Bombal explains SNORT — a free, open-source intrusion detection system from Cisco — and why it’s worth learning. Watch above; the essentials are below.',
+    keyPoints: [
+      'SNORT is a free, open-source intrusion detection/prevention engine maintained by Cisco.',
+      'The video covers how SNORT and SnortML fit into network threat detection.',
+      'Pitched as a skill that can accelerate a cybersecurity career.',
+    ],
+  }),
+
+  // --- Smart Homes ---
+  article({
+    headline: 'Is Your Smart Home Driving Your Family Crazy? Designing Automations Everyone Likes',
+    blurb: 'Foxy’s Lab on building automations the whole household actually enjoys — covering busy partners, accessibility, neurodivergent users and kids.',
+    category: 'smart-homes', source: "Foxy's Lab",
+    sourceUrl: 'https://www.youtube.com/watch?v=tJp8NjwJy0k', videoYoutubeId: 'tJp8NjwJy0k',
+    publishedAt: '2026-06-07T20:00:23Z', imageSeed: 87,
+    intro: 'Foxy’s Lab tackles a problem every enthusiast knows: a smart home built for you, not your family. Watch the full video above; here’s the practical advice.',
+    keyPoints: [
+      'Designs for four groups: busy partners, accessibility needs, neurodivergent users and families with children.',
+      'Practical tips include Braille stickers for navigation, physical/wireless remotes and smart dimmers.',
+      'The goal: make automation popular at home by prioritising everyday usability, not just the tech.',
+    ],
+  }),
+  article({
+    headline: 'Cooling a Room Without Installing Air Conditioning',
+    blurb: 'Paul Hibbert tests a no-install cooling option, the DREO TurboCool, as a smart-home-friendly alternative to fitted air conditioning.',
+    category: 'smart-homes', source: 'Paul Hibbert',
+    sourceUrl: 'https://www.youtube.com/watch?v=qGPRhSblEdY', videoYoutubeId: 'qGPRhSblEdY',
+    publishedAt: '2026-06-13T09:00:07Z', imageSeed: 88,
+    intro: 'Paul Hibbert looks at a way to cool a room without installing traditional air conditioning, testing the DREO TurboCool. Watch the full video above.',
+    keyPoints: [
+      'A no-installation cooling device pitched as an alternative to fitted air-con.',
+      'Hands-on impressions from Paul Hibbert’s smart-home perspective.',
+    ],
+  }),
+
+  // --- Gaming ---
+  article({
+    headline: 'Onimusha: Way of the Sword Demo Tested Across PS5, PS5 Pro and Xbox',
+    blurb: 'Digital Foundry analyses Capcom’s Onimusha: Way of the Sword demo, focusing on PS5 Pro ray tracing and PSSR upscaling versus the base consoles.',
+    category: 'gaming', source: 'Digital Foundry',
+    sourceUrl: 'https://www.youtube.com/watch?v=0vl5NQNS2ZM', videoYoutubeId: '0vl5NQNS2ZM',
+    publishedAt: '2026-06-13T13:58:57Z', imageSeed: 89,
+    intro: 'Digital Foundry puts the Onimusha: Way of the Sword demo under the microscope across consoles. Watch the full tech analysis above; the findings are below.',
+    keyPoints: [
+      'Focus on the PS5 Pro’s ray-traced reflections and PSSR upscaling versus base PS5 and Xbox.',
+      'All versions — even Series S — reportedly perform well.',
+      'The promised Switch 2 version still lacks a demo ahead of the game’s September launch.',
+    ],
+  }),
+  article({
+    headline: 'Empulse: The Splitgate Studio’s Titanfall 2-Inspired Shooter',
+    blurb: 'GameSpot goes hands-on with Empulse, 1047 Games’ new shooter, and hears why the studio is avoiding free-to-play after Splitgate 2.',
+    category: 'gaming', source: 'GameSpot',
+    sourceUrl: 'https://www.youtube.com/watch?v=MNB9rjDhzvs', videoYoutubeId: 'MNB9rjDhzvs',
+    publishedAt: '2026-06-12T15:00:01Z', imageSeed: 90,
+    intro: 'GameSpot previews Empulse, the next game from Splitgate studio 1047 Games. Watch the hands-on above; key points below.',
+    keyPoints: [
+      'A new shooter drawing clear inspiration from Titanfall 2.',
+      'The studio is steering away from free-to-play after Splitgate 2’s launch struggles.',
+      'Includes a conversation with 1047 Games’ CEO.',
+    ],
+  }),
+
+  // --- Science ---
+  article({
+    headline: 'Let’s Steal a New Moon: A Thought Experiment on Swapping Earth’s Satellite',
+    blurb: 'Kurzgesagt runs a thought experiment on replacing the Moon with another body — like Io or Titan — and whether ours is already the best fit.',
+    category: 'science', source: 'Kurzgesagt – In a Nutshell',
+    sourceUrl: 'https://www.youtube.com/watch?v=2acc7oyXIZI', videoYoutubeId: '2acc7oyXIZI',
+    publishedAt: '2026-06-10T14:00:28Z', imageSeed: 91,
+    intro: 'Kurzgesagt’s latest is a playful thought experiment: what if Earth swapped its Moon for another world? Watch above; the gist is below.',
+    keyPoints: [
+      'Considers candidates like volcanic Io and methane-rich Titan as Moon replacements.',
+      'Weighs the consequences each would have for Earth’s stability.',
+      'Ultimately asks whether our existing Moon is already the ideal match.',
+    ],
+  }),
+  article({
+    headline: 'Have We Been Searching for Aliens the Wrong Way?',
+    blurb: 'PBS Space Time argues that advances in astronomy could overhaul how we hunt for extraterrestrial signals after decades of SETI without a confirmed detection.',
+    category: 'science', source: 'PBS Space Time',
+    sourceUrl: 'https://www.youtube.com/watch?v=4OM0zTfdsPo', videoYoutubeId: '4OM0zTfdsPo',
+    publishedAt: '2026-06-04T20:15:03Z', imageSeed: 92,
+    intro: 'PBS Space Time examines why decades of SETI have turned up nothing — and how new methods could change that. Watch the full episode above.',
+    keyPoints: [
+      'No confirmed alien signals since Frank Drake’s pioneering 1960 search.',
+      'New astronomy and technology could revolutionise search strategy.',
+      'Suggests revised methods might finally answer whether anyone is signalling.',
+    ],
+  }),
+  article({
+    headline: 'How Did Life Form Before Cells? New Experimental Evidence',
+    blurb: 'Anton Petrov reviews fresh research on how complex molecules — and life — may have formed before cellular structures existed.',
+    category: 'science', source: 'Anton Petrov',
+    sourceUrl: 'https://www.youtube.com/watch?v=kp4N7eNsRm4', videoYoutubeId: 'kp4N7eNsRm4',
+    publishedAt: '2026-06-13T22:00:15Z', imageSeed: 93,
+    intro: 'Anton Petrov walks through new experimental evidence on the origins of life before cells. Watch above; the highlights are below.',
+    keyPoints: [
+      'Examines how complex molecules could have formed ahead of cellular structures.',
+      'Covers organic compounds delivered from space, hydrothermal vents and the role of freezing.',
+      'Reviews recent papers on rapid life formation and the open gaps in abiogenesis.',
+    ],
+  }),
+  article({
+    headline: 'How a Random System Can Actually Be Predictable',
+    blurb: 'Veritasium uses a Galton board to show how individually random events produce a strikingly predictable pattern in aggregate.',
+    category: 'science', source: 'Veritasium',
+    sourceUrl: 'https://www.youtube.com/watch?v=AUmHqD0lGHo', videoYoutubeId: 'AUmHqD0lGHo',
+    publishedAt: '2026-06-08T13:00:02Z', imageSeed: 94,
+    intro: 'Veritasium tackles a counterintuitive idea: systems that look random at the level of a single event can be highly predictable in aggregate. Watch the full explainer above; the gist is below.',
+    keyPoints: [
+      'A Galton board is the central example — balls bounce randomly through pegs yet pile up in a consistent distribution.',
+      'Predicting any single ball’s path is effectively impossible, but the overall pattern is reliable and forecastable.',
+      'The principle underpins ideas across physics, statistics and complex systems.',
+    ],
+  }),
+
+  // --- Technology ---
+  article({
+    headline: 'MKBHD’s WWDC 2026 Impressions: New Siri AI and iOS 27',
+    blurb: 'Marques Brownlee gives his first impressions of Apple’s WWDC 2026 — the revamped Siri AI and iOS 27.',
+    category: 'technology', source: 'Marques Brownlee (MKBHD)',
+    sourceUrl: 'https://www.youtube.com/watch?v=_gCXmKjDecU', videoYoutubeId: '_gCXmKjDecU',
+    publishedAt: '2026-06-09T05:48:41Z', imageSeed: 95,
+    intro: 'Marques Brownlee shares his take on Apple’s WWDC 2026 announcements. Watch the full impressions above; the headlines are below.',
+    keyPoints: [
+      'Focus on the new Siri AI capabilities and iOS 27 features.',
+      'Measured first impressions of the keynote.',
+    ],
+  }),
+  article({
+    headline: '$2 vs $200,000 Projector: Testing the Extremes',
+    blurb: 'Linus Tech Tips compares projectors from dirt-cheap to cinema-grade — NexiGo, BenQ, JVC and a Christie Boxer — to see what the money buys.',
+    category: 'technology', source: 'Linus Tech Tips',
+    sourceUrl: 'https://www.youtube.com/watch?v=JAPMSoM6U7w', videoYoutubeId: 'JAPMSoM6U7w',
+    publishedAt: '2026-06-13T17:30:46Z', imageSeed: 96,
+    intro: 'Linus Tech Tips pits a $2 projector against a $200,000 one, with several models in between. Watch the full comparison above.',
+    keyPoints: [
+      'Compares budget to premium: NexiGo PJ40, BenQ TK710STi, JVC DLA-RS3200 and Christie Boxer 4K30.',
+      'Shows how performance scales (or doesn’t) with price.',
+      'Includes a real-world demo at a Vancouver dome venue.',
+    ],
+  }),
+  article({
+    headline: 'Tech News Roundup: SpaceX’s Record IPO, Chrome Updates and More',
+    blurb: 'TechLinked’s news roundup covers SpaceX’s record-breaking IPO, new Google Chrome updates and a rapid-fire batch of tech headlines.',
+    category: 'technology', source: 'TechLinked',
+    sourceUrl: 'https://www.youtube.com/watch?v=-AHRb9TYZaU', videoYoutubeId: '-AHRb9TYZaU',
+    publishedAt: '2026-06-13T01:18:28Z', imageSeed: 97,
+    intro: 'TechLinked runs through the day’s tech news. Watch the full episode above; the headlines it covers are below.',
+    keyPoints: [
+      'SpaceX’s record-breaking IPO announcement.',
+      'Google Chrome’s latest updates.',
+      'Quick hits: Steam Frame speculation, Flock leaks, AMD’s bug-bounty response, Deezer’s AI music flagging and Red Lobster’s AI plans.',
+    ],
+  }),
+
   // ===================== DECEMBER 2025 (archive, prior year) =====================
   article({
     headline: 'Nvidia Wants to Fix the Shortage of Strong American Open AI Models',
@@ -976,11 +1336,11 @@ const insertArticle = db.prepare(`
   INSERT INTO articles (
     slug, headline, blurb, body, hero_image, hero_image_alt, hero_credit,
     thumbnail_image, thumbnail_alt, category_id, author, source_name, source_url,
-    reading_minutes, featured, published_at
+    video_youtube_id, video_duration_seconds, reading_minutes, featured, published_at
   ) VALUES (
     @slug, @headline, @blurb, @body, @hero_image, @hero_image_alt, @hero_credit,
     @thumbnail_image, @thumbnail_alt, @category_id, @author, @source_name, @source_url,
-    @reading_minutes, @featured, @published_at
+    @video_youtube_id, @video_duration_seconds, @reading_minutes, @featured, @published_at
   )
 `);
 

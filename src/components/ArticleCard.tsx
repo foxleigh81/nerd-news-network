@@ -45,6 +45,13 @@ export function ArticleCard({ article, variant = 'standard', headingLevel = 2, i
                 : '(max-width: 600px) 100vw, (max-width: 1100px) 50vw, 380px'
           }
         />
+        {article.video_youtube_id ? (
+          <span className={styles.playBadge} aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </span>
+        ) : null}
       </Link>
 
       <div className={styles.body}>
