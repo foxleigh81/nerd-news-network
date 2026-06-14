@@ -17,7 +17,9 @@
   --red-ink: #c20811;      /* red for small text/links (AA on paper) */
   --red-bright: #ff4438;   /* red for small text on dark surfaces (AA on ink) */
   --red-dark: #9b060e;     /* hover/active */
-  --ink-invert: #f4f3ef;   /* text on dark surfaces */
+  --ink-invert: #f4f3ef;   /* opposite of ink — text on an ink-coloured fill (flips with theme) */
+  --surface-invert: #0a0a0a; /* always-dark chrome (top bar, footer, callouts, code) */
+  --on-invert: #f4f3ef;    /* text on the always-dark chrome */
   --brand-grey: #8a8a8a;   /* neutral backdrop giving the white/black/red logo contrast */
 
   /* Type families (wired up by next/font) */
@@ -44,6 +46,27 @@
   --shadow-md: 0 6px 24px rgba(10, 10, 10, 0.1);
 
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* ------------------------------ Dark theme ------------------------------- */
+[data-theme='dark'] {
+  --paper: #101113;
+  --paper-2: #17191c;
+  --paper-3: #1e2024;
+  --ink: #ecebE6;          /* primary text (light) */
+  --ink-2: #c3c2bc;
+  --muted: #9b9a93;        /* AA on dark paper */
+  --line: #2a2c30;
+  --line-2: #3a3d42;
+  --red: #ff4438;          /* brighter brand red for dark surfaces */
+  --red-ink: #ff5d52;      /* red text/links — AA on dark paper */
+  --red-dark: #ff8077;     /* hover */
+  --red-bright: #ff5d52;   /* small red text on the dark chrome */
+  --ink-invert: #131417;   /* opposite of ink — dark, for text on a light ink-fill */
+  --surface-invert: #1c1d20; /* slightly elevated dark chrome */
+  --on-invert: #f4f3ef;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 8px 28px rgba(0, 0, 0, 0.6);
 }
 
 /* ------------------------------ Reset ------------------------------------ */
@@ -82,6 +105,7 @@ body {
   font-family: var(--font-serif);
   font-size: var(--step-0);
   line-height: 1.6;
+  transition: background-color 0.2s var(--ease), color 0.2s var(--ease);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   min-height: 100dvh;
@@ -143,8 +167,8 @@ h4 {
   left: 0.75rem;
   top: -100px;
   z-index: 1000;
-  background: var(--ink);
-  color: var(--ink-invert);
+  background: var(--surface-invert);
+  color: var(--on-invert);
   padding: 0.7rem 1.1rem;
   font-family: var(--font-mono);
   font-size: var(--step--1);
@@ -289,8 +313,8 @@ h4 {
   border-radius: var(--radius);
 }
 .prose pre {
-  background: var(--ink);
-  color: var(--ink-invert);
+  background: var(--surface-invert);
+  color: var(--on-invert);
   padding: 1rem 1.2rem;
   border-radius: var(--radius);
   overflow-x: auto;

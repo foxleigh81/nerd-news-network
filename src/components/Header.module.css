@@ -4,8 +4,8 @@
 
 /* ------------------------------- Top bar --------------------------------- */
 .topbar {
-  background: var(--ink);
-  color: var(--ink-invert);
+  background: var(--surface-invert);
+  color: var(--on-invert);
 }
 .topbarInner {
   max-width: var(--container);
@@ -20,7 +20,7 @@
 }
 .date {
   text-transform: uppercase;
-  color: var(--ink-invert);
+  color: var(--on-invert);
   white-space: nowrap;
 }
 .edition {
@@ -36,7 +36,7 @@
   text-transform: uppercase;
 }
 .utility a {
-  color: var(--ink-invert);
+  color: var(--on-invert);
   transition: color 0.15s var(--ease);
 }
 .utility a:hover {

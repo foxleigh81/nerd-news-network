@@ -1,7 +1,7 @@
 .footer {
   margin-top: clamp(3rem, 2rem + 4vw, 5rem);
-  background: var(--ink);
-  color: var(--ink-invert);
+  background: var(--surface-invert);
+  color: var(--on-invert);
   border-top: 4px solid var(--red);
 }
 
@@ -46,7 +46,7 @@
   height: 40px;
   border: 1px solid #3a3a3a;
   border-radius: var(--radius);
-  color: var(--ink-invert);
+  color: var(--on-invert);
   transition: background 0.15s var(--ease), border-color 0.15s var(--ease), color 0.15s var(--ease);
 }
 .socialLink:hover {

@@ -5,6 +5,7 @@ import { formatDate } from '@/lib/format';
 import { buildNow } from '@/lib/db';
 import { SITE } from '@/lib/site';
 import { PrimaryNav, type NavItem } from './PrimaryNav';
+import { ThemeToggle } from './ThemeToggle';
 import logo from '../../public/logo/logo.png';
 import styles from './Header.module.css';
 
@@ -32,6 +33,7 @@ export function Header() {
               <Link href="/about">About</Link>
             </li>
           </ul>
+          <ThemeToggle />
         </div>
       </div>
 

@@ -37,14 +37,26 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0a0a0a',
-  colorScheme: 'light',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#101113' },
+  ],
+  colorScheme: 'light dark',
 };
+
+// Runs before paint: applies the saved theme (or the OS preference) to <html>
+// so there is no flash of the wrong colour scheme.
+const themeBootScript = `(function(){try{var t=localStorage.getItem('nnn-theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t;}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-GB" className={`${display.variable} ${serif.variable} ${mono.variable}`}>
+    <html
+      lang="en-GB"
+      className={`${display.variable} ${serif.variable} ${mono.variable}`}
+      suppressHydrationWarning
+    >
       <body>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         <a className="skip-link" href="#main">
           Skip to main content
         </a>
