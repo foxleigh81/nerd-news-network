@@ -1,0 +1,108 @@
+.footer {
+  margin-top: clamp(3rem, 2rem + 4vw, 5rem);
+  background: var(--ink);
+  color: var(--ink-invert);
+  border-top: 4px solid var(--red);
+}
+
+.inner {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: clamp(1.5rem, 1rem + 2vw, 3rem);
+  padding-block: clamp(2.5rem, 2rem + 2vw, 3.5rem);
+}
+
+.brand {
+  max-width: 40ch;
+}
+.logoPlate {
+  display: inline-block;
+  background: var(--brand-grey);
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--radius);
+  margin-bottom: 1.1rem;
+}
+.logo {
+  width: 210px;
+  height: auto;
+}
+.mission {
+  font-family: var(--font-serif);
+  font-size: var(--step--1);
+  line-height: 1.6;
+  color: #b9b8b2;
+}
+
+.social {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 1.4rem;
+}
+.socialLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #3a3a3a;
+  border-radius: var(--radius);
+  color: var(--ink-invert);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+.socialLink:hover {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+
+.col ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.colTitle {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--red-bright);
+  margin-bottom: 1.1rem;
+}
+.col a {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--step--1);
+  color: #d8d7d1;
+  transition: color 0.15s var(--ease);
+}
+.col a:hover {
+  color: #fff;
+}
+
+.legal {
+  border-top: 1px solid #2a2a2a;
+  padding-block: 1.3rem;
+}
+.legal p {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.7;
+  letter-spacing: 0.02em;
+  color: #8d8c86;
+  max-width: 90ch;
+}
+
+@media (max-width: 820px) {
+  .inner {
+    grid-template-columns: 1fr 1fr;
+  }
+  .brand {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 480px) {
+  .inner {
+    grid-template-columns: 1fr;
+  }
+}

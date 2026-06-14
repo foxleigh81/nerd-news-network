@@ -1,0 +1,51 @@
+.page {
+  padding-block: clamp(1.5rem, 1rem + 2vw, 2.75rem);
+}
+
+.head {
+  margin-bottom: 1.5rem;
+}
+.title {
+  font-size: var(--step-4);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin-top: 0.4rem;
+}
+.desc {
+  font-family: var(--font-serif);
+  font-size: var(--step-1);
+  color: var(--ink-2);
+  max-width: 60ch;
+  margin-top: 0.6rem;
+}
+
+.adTop {
+  margin-bottom: clamp(1.75rem, 1.25rem + 2vw, 2.75rem);
+}
+.adFeed {
+  margin-block: clamp(2rem, 1.5rem + 2vw, 3rem);
+}
+
+.leadWrap {
+  padding-bottom: clamp(1.75rem, 1.25rem + 2vw, 2.75rem);
+  margin-bottom: clamp(1.75rem, 1.25rem + 2vw, 2.75rem);
+  border-bottom: 2px solid var(--ink);
+}
+
+.empty {
+  font-family: var(--font-serif);
+  font-size: var(--step-1);
+  color: var(--muted);
+  padding-block: 3rem;
+  text-align: center;
+}
+
+.count {
+  margin-top: 2rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: center;
+}

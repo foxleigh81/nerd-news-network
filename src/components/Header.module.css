@@ -1,0 +1,81 @@
+.header {
+  background: var(--paper);
+}
+
+/* ------------------------------- Top bar --------------------------------- */
+.topbar {
+  background: var(--ink);
+  color: var(--ink-invert);
+}
+.topbarInner {
+  max-width: var(--container);
+  margin-inline: auto;
+  padding: 0.45rem var(--gutter);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+.date {
+  text-transform: uppercase;
+  color: var(--ink-invert);
+  white-space: nowrap;
+}
+.edition {
+  flex: 1;
+  text-align: center;
+  color: #b9b8b2;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+.utility {
+  display: flex;
+  gap: 1.1rem;
+  text-transform: uppercase;
+}
+.utility a {
+  color: var(--ink-invert);
+  transition: color 0.15s var(--ease);
+}
+.utility a:hover {
+  color: var(--red-bright);
+}
+
+@media (max-width: 640px) {
+  .edition {
+    display: none;
+  }
+}
+
+/* ------------------------------ Masthead --------------------------------- */
+.masthead {
+  position: relative;
+  background: var(--brand-grey);
+}
+.mastheadInner {
+  max-width: var(--container);
+  margin-inline: auto;
+  padding: clamp(1.1rem, 0.6rem + 1.6vw, 1.8rem) var(--gutter);
+  display: flex;
+  justify-content: center;
+}
+.logo {
+  display: inline-block;
+  border-radius: var(--radius);
+}
+.logoImg {
+  width: clamp(190px, 32vw, 268px);
+  height: auto;
+}
+.mastheadRule {
+  height: 3px;
+  background: linear-gradient(90deg, var(--ink) 0 70%, var(--red) 70% 100%);
+}
+
+@media (min-width: 821px) {
+  .mastheadInner {
+    justify-content: flex-start;
+  }
+}

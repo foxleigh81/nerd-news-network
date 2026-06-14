@@ -1,0 +1,41 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(1.5rem, 1rem + 2vw, 2.5rem) clamp(1.25rem, 1rem + 1.5vw, 2.25rem);
+}
+
+.cell {
+  display: flex;
+}
+.cell > * {
+  width: 100%;
+}
+
+/* Column dividers feel like a print page; show on wider screens. */
+@media (min-width: 1000px) {
+  .grid {
+    column-gap: 0;
+  }
+  .cell {
+    padding-inline: clamp(1rem, 0.5rem + 1.2vw, 1.9rem);
+    border-left: 1px solid var(--line);
+  }
+  .cell:nth-child(3n + 1) {
+    border-left: none;
+    padding-left: 0;
+  }
+  .cell:nth-child(3n) {
+    padding-right: 0;
+  }
+}
+
+@media (max-width: 999px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 560px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

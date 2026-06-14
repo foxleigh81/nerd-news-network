@@ -1,0 +1,32 @@
+.wrap {
+  margin-bottom: 1.25rem;
+}
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.link {
+  color: var(--muted);
+  transition: color 0.15s var(--ease);
+}
+.link:hover {
+  color: var(--red-ink);
+}
+.current {
+  color: var(--ink);
+  font-weight: 500;
+}
+.sep {
+  color: var(--line-2);
+}
