@@ -112,7 +112,9 @@ export function getArchiveMonths(): ArchiveMonth[] {
 }
 
 export function getCategories(): Category[] {
-  return db().prepare('SELECT id, slug, name, description FROM categories ORDER BY name ASC').all() as Category[];
+  // Ordered by insertion (see scripts/seed.mjs CATEGORIES) so the nav reflects
+  // the intended section order rather than alphabetical.
+  return db().prepare('SELECT id, slug, name, description FROM categories ORDER BY id ASC').all() as Category[];
 }
 
 export function getCategoryBySlug(slug: string): Category | null {

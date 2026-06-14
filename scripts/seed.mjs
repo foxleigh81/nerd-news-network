@@ -98,12 +98,14 @@ if (reset) {
 // ---------------------------------------------------------------------------
 // Categories
 // ---------------------------------------------------------------------------
+// Order here defines the order categories appear in the nav (see getCategories).
 const CATEGORIES = [
-  { slug: 'technology', name: 'Technology', description: 'Hardware, software, security and the people building it.' },
-  { slug: 'gaming', name: 'Gaming', description: 'Games, consoles, showcases and the industry behind them.' },
-  { slug: 'science', name: 'Science', description: 'Research, discovery and the world explained.' },
-  { slug: 'space', name: 'Space', description: 'Launches, missions, telescopes and the cosmos beyond.' },
   { slug: 'ai', name: 'AI', description: 'Machine learning, models and the automated age.' },
+  { slug: 'networking', name: 'Networking', description: 'Connectivity, wireless standards and the plumbing of the internet.' },
+  { slug: 'smart-homes', name: 'Smart Homes', description: 'Connected devices, hubs and home automation.' },
+  { slug: 'gaming', name: 'Gaming', description: 'Games, consoles, showcases and the industry behind them.' },
+  { slug: 'science', name: 'Science', description: 'Research, discovery and the cosmos explained.' },
+  { slug: 'technology', name: 'Technology', description: 'Hardware, software, security and the people building it.' },
 ];
 
 const insertCategory = db.prepare(
@@ -177,7 +179,7 @@ const ARTICLES = [
     headline: 'James Webb Reveals Two Completely Different Twilights on Ultra-Hot World WASP-121b',
     blurb:
       'New JWST observations show the dawn and dusk edges of the scorching gas giant differ sharply in temperature and chemistry — the clearest evidence yet for atmospheric asymmetry on a distant world.',
-    category: 'space', source: 'ScienceDaily',
+    category: 'science', source: 'ScienceDaily',
     sourceUrl: 'https://www.sciencedaily.com/releases/2026/06/260611024559.htm',
     publishedAt: '2026-06-11T08:30:00Z', featured: 1, imageSeed: 11,
     sections: [
@@ -192,7 +194,7 @@ const ARTICLES = [
     headline: 'Webb Spots a Hot Jupiter Trailing Twin Gas Tails That Defy Easy Explanation',
     blurb:
       'The James Webb Space Telescope has detected an ultra-hot Jupiter shedding two distinct streams of gas — a configuration researchers are still working to explain.',
-    category: 'space', source: 'Space.com',
+    category: 'science', source: 'Space.com',
     sourceUrl: 'https://www.space.com/astronomy/exoplanets/james-webb-space-telescope-discovers-a-hot-jupiter-exoplanet-leaking-twin-gas-tails-that-defy-explanation',
     publishedAt: '2026-06-09T14:10:00Z', imageSeed: 12,
     sections: [
@@ -206,7 +208,7 @@ const ARTICLES = [
     headline: 'NASA’s Nancy Grace Roman Space Telescope Is Complete — and May Launch Months Early',
     blurb:
       'NASA’s next great observatory has finished construction and is being prepared for shipment to Florida, with launch now targeted for as early as autumn 2026.',
-    category: 'space', source: 'Space.com',
+    category: 'science', source: 'Space.com',
     sourceUrl: 'https://www.space.com/space-exploration/the-nancy-grace-roman-space-telescope-nasas-next-great-observatory-is-finally-complete',
     publishedAt: '2026-06-07T09:00:00Z', imageSeed: 13,
     sections: [
@@ -220,7 +222,7 @@ const ARTICLES = [
     headline: 'A Satellite-Boosting Spacecraft Gets Set for an Air-Launched Ride to Orbit',
     blurb:
       'Engineers prepared a robotic servicing spacecraft for encapsulation inside an air-launched rocket — part of a growing push toward maintaining and repositioning satellites in orbit.',
-    category: 'space', source: 'Space.com',
+    category: 'science', source: 'Space.com',
     sourceUrl: 'https://www.space.com/space-exploration/launches-spacecraft/satellite-boosting-spacecraft-inside-air-launched-rocket-space-photo-of-the-day-for-june-12-2026',
     publishedAt: '2026-06-12T11:45:00Z', imageSeed: 14,
     sections: [
@@ -416,7 +418,7 @@ const ARTICLES = [
   article({
     headline: 'SpaceX’s Starship Flight 12 Splashes Down in the Indian Ocean as Planned',
     blurb: 'The first Starship mission of 2026 completed a suborbital flight, deploying dummy payloads before a controlled splashdown.',
-    category: 'space', source: 'Space.com',
+    category: 'science', source: 'Space.com',
     sourceUrl: 'https://www.space.com/news/live/spacex-starship-flight-12-launch-updates-may-22-2026',
     publishedAt: '2026-05-22T23:00:00Z', imageSeed: 36,
     sections: [
@@ -554,7 +556,7 @@ const ARTICLES = [
   article({
     headline: 'Asia-Based Spies Breached Critical Networks Across 37 Countries',
     blurb: 'Investigators linked a sweeping espionage campaign to intrusions into critical infrastructure networks in dozens of countries.',
-    category: 'technology', source: 'The Register',
+    category: 'networking', source: 'The Register',
     sourceUrl: 'https://www.theregister.com/security/2026/02/05/asia-based-spies-hacked-37-countries-critical-networks/4130663',
     publishedAt: '2026-02-05T10:00:00Z', imageSeed: 48,
     sections: [
@@ -608,6 +610,98 @@ const ARTICLES = [
     sections: [
       S('Growing the stack', 'New open models broaden the tools available for building AI agents.'),
       S('Buying in', 'An acquisition rounds out the company’s open-source strategy.'),
+    ],
+  }),
+
+  // ===================== NETWORKING =====================
+  article({
+    headline: '6G Is Taking Shape — but Nobody’s Quite Ready to Pay for It',
+    blurb: 'The next generation of wireless is advancing through the standards bodies, even as carriers and users question who will foot the bill.',
+    category: 'networking', source: 'The Register',
+    sourceUrl: 'https://www.theregister.com/networks/2026/05/27/6g-the-next-gen-of-wireless-tech-nobodys-ready-to-pay-for/5246136',
+    publishedAt: '2026-05-27T10:00:00Z', imageSeed: 60,
+    sections: [
+      S('Standards first, demand later', 'The first 6G specifications are expected in the coming years, but the commercial case remains unproven.'),
+      S('Who pays?', 'Operators are wary of funding another costly upgrade cycle without clear demand.'),
+    ],
+  }),
+  article({
+    headline: 'HPE Ships Its First Juniper–Aruba Collaboration: Self-Driving Wi-Fi',
+    blurb: 'Following its Juniper acquisition, HPE debuts AI-driven networking that aims to manage and tune wireless networks automatically.',
+    category: 'networking', source: 'The Register',
+    sourceUrl: 'https://www.theregister.com/networks/2026/05/08/hpe-drops-first-juniper-x-aruba-collab-self-driving-wi-fi/5235463',
+    publishedAt: '2026-05-08T11:00:00Z', imageSeed: 61,
+    sections: [
+      S('Two portfolios, one stack', 'The release blends Aruba and Juniper technology into a single AI-managed networking offering.'),
+      S('Hands-off operations', 'The pitch is networks that tune and heal themselves with less manual intervention.'),
+    ],
+  }),
+  article({
+    headline: 'Cisco Unveils a 102.4 Tbps Silicon One G300 Switch Chip',
+    blurb: 'Cisco’s new switching silicon targets massive AI clusters, promising to connect tens of thousands of GPUs with far fewer switches.',
+    category: 'networking', source: 'The Register',
+    sourceUrl: 'https://www.theregister.com/on-prem/2026/02/10/cisco-unveils-1024t-silicon-one-g300-switch-chip/4836608',
+    publishedAt: '2026-02-10T09:30:00Z', imageSeed: 62,
+    sections: [
+      S('Bandwidth for AI', 'The chip squarely targets the networking demands of large GPU clusters.'),
+      S('Fewer boxes', 'A higher port count means the same fabric can be built with a fraction of the switches.'),
+    ],
+  }),
+  article({
+    headline: 'Wi-Fi 8 Will Trade Peak Speed for Rock-Solid Reliability',
+    blurb: 'The next Wi-Fi standard won’t raise top speeds — instead it focuses on consistent, low-latency connections in congested environments.',
+    category: 'networking', source: 'The Register',
+    sourceUrl: 'https://www.theregister.com/2025/12/26/coming_wifi_8_reliability/',
+    publishedAt: '2025-12-26T10:00:00Z', imageSeed: 63,
+    sections: [
+      S('Reliability over records', 'Rather than chasing headline speeds, Wi-Fi 8 prioritises dependable performance.'),
+      S('Years away', 'Mainstream devices aren’t expected for a while yet.'),
+    ],
+  }),
+
+  // ===================== SMART HOMES =====================
+  article({
+    headline: 'Matter 1.5 Lands With Security Cameras, Closures and Energy Management',
+    blurb: 'The smart-home standard’s latest update finally brings camera support, opening the door to cross-ecosystem security devices.',
+    category: 'smart-homes', source: 'Tom’s Guide',
+    sourceUrl: 'https://www.tomsguide.com/home/smart-home/matter-1-5-update-launches-with-3-new-features-including-security-camera-support',
+    publishedAt: '2026-05-12T12:00:00Z', imageSeed: 64,
+    sections: [
+      S('Cameras join the fold', 'Matter 1.5 adds support for security cameras across compatible ecosystems.'),
+      S('More than video', 'The update also covers window and door closures and energy management.'),
+    ],
+  }),
+  article({
+    headline: 'IKEA’s New Matter Smart-Home Devices Hit Connectivity Snags — Fix Incoming',
+    blurb: 'Early adopters report dropouts with IKEA’s latest Matter devices, but the company says a firmware fix is on the way.',
+    category: 'smart-homes', source: 'Tom’s Guide',
+    sourceUrl: 'https://www.tomsguide.com/home/smart-home/ikeas-new-matter-smart-home-devices-are-struggling-to-stay-connected-but-a-firmware-fix-is-in-the-works',
+    publishedAt: '2026-04-15T09:00:00Z', imageSeed: 65,
+    sections: [
+      S('Teething problems', 'Some users found the new devices struggling to stay connected.'),
+      S('A fix in the works', 'IKEA says a firmware update will address the issue.'),
+    ],
+  }),
+  article({
+    headline: 'Apple’s Long-Rumoured Smart-Home Hub Slips Further Down the Calendar',
+    blurb: 'A new report pushes the expected launch window for Apple’s smart-home hub back again, testing the patience of HomeKit fans.',
+    category: 'smart-homes', source: 'Tom’s Guide',
+    sourceUrl: 'https://www.tomsguide.com/home/smart-home/apple-smart-home-hub-we-just-got-bad-news-about-the-release-window',
+    publishedAt: '2026-03-20T10:30:00Z', imageSeed: 66,
+    sections: [
+      S('Another delay', 'The device’s release window appears to have slipped again.'),
+      S('Tied to Siri', 'The hub is closely linked to Apple’s broader smart-home ambitions.'),
+    ],
+  }),
+  article({
+    headline: 'IKEA and Samsung Team Up to Simplify the Affordable Smart Home',
+    blurb: 'A new collaboration brings dozens of IKEA’s Matter-over-Thread devices into Samsung’s SmartThings ecosystem.',
+    category: 'smart-homes', source: 'Tom’s Guide',
+    sourceUrl: 'https://www.tomsguide.com/home/a-familiar-and-easy-connectivity-experience-without-financial-burden-ikea-and-samsung-want-to-streamline-your-smart-home-heres-how',
+    publishedAt: '2026-02-18T11:00:00Z', imageSeed: 67,
+    sections: [
+      S('Cheaper, simpler', 'The tie-up aims to make budget smart-home kit easier to set up.'),
+      S('Matter over Thread', 'Dozens of IKEA devices gain SmartThings support.'),
     ],
   }),
 

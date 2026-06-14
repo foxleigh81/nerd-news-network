@@ -10,10 +10,9 @@ import styles from './Header.module.css';
 
 export function Header() {
   const categories = getCategories();
-  const navItems: NavItem[] = [
-    ...categories.map((c) => ({ href: `/category/${c.slug}`, label: c.name })),
-    { href: '/archive', label: 'Archive' },
-  ];
+  // The primary nav is the section list only — Archive lives in the utility bar
+  // and footer, not among the categories.
+  const navItems: NavItem[] = categories.map((c) => ({ href: `/category/${c.slug}`, label: c.name }));
   const today = formatDate(buildNow().toISOString());
 
   return (
