@@ -98,6 +98,30 @@ to INSERT/UPDATE rows** — it should never need to change the schema. Dates are
 
 > ★ = strongly recommended for a complete, well-credited, accessible article.
 
+### Body format — write a "cliff-notes" digest, not a teaser
+
+`body` is Markdown, sanitised at build. The goal of each summary is to give the
+reader **all the salient points of the original** in a shorter, scannable form,
+so they only click through for the full thing if they want it. Aim for ~150–350
+words structured as:
+
+1. A 1–2 sentence overview.
+2. A `## The short version` heading followed by a bullet list of the key facts
+   (figures, names, dates, findings — everything that matters).
+3. One or two short `##` sections expanding on context and why it matters.
+
+Bodies may embed media pulled from the original article:
+
+- **Images** — standard Markdown `![alt](url)` or a `<figure class="media">`
+  with an `<img>` and `<figcaption>` credit. Always include alt text.
+- **Video** — an `<iframe>` from `youtube-nocookie.com`, `youtube.com` or
+  `player.vimeo.com` only (other hosts are stripped by the sanitiser). Wrap it in
+  `<div class="video">` for a responsive 16:9 frame.
+
+The renderer also allows headings (h2–h4), lists, blockquotes, tables, `code`/
+`pre`, and links (external links automatically open in a new tab with
+`rel="noopener noreferrer"`). Everything else is stripped.
+
 ### `related_articles` (curated sidebar links)
 
 Populate this to control the "Related Reading" sidebar. If an article has no

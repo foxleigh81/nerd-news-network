@@ -13,16 +13,23 @@ export function renderMarkdown(markdown: string): string {
   return sanitizeHtml(raw, {
     allowedTags: [
       'h2', 'h3', 'h4', 'p', 'a', 'ul', 'ol', 'li', 'blockquote', 'strong',
-      'em', 'code', 'pre', 'br', 'hr', 'figure', 'figcaption', 'img', 'table',
-      'thead', 'tbody', 'tr', 'th', 'td',
+      'em', 'code', 'pre', 'br', 'hr', 'figure', 'figcaption', 'img', 'div',
+      'iframe', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
     ],
     allowedAttributes: {
       a: ['href', 'title', 'rel', 'target'],
       img: ['src', 'alt', 'width', 'height', 'loading', 'decoding'],
+      iframe: ['src', 'title', 'width', 'height', 'allow', 'allowfullscreen', 'loading', 'referrerpolicy'],
+      div: ['class'],
+      figure: ['class'],
       td: ['align'],
       th: ['align'],
     },
     allowedSchemes: ['http', 'https', 'mailto'],
+    // Only allow video embeds from trusted, privacy-respecting hosts.
+    allowedIframeHostnames: ['www.youtube-nocookie.com', 'www.youtube.com', 'player.vimeo.com'],
+    allowIframeRelativeUrls: false,
+    allowedClasses: { div: ['video'], figure: ['media'] },
     transformTags: {
       // External links open safely.
       a: (tagName, attribs) => {
