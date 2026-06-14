@@ -1,0 +1,36 @@
+{
+  "name": "nerd-news-network",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Nerd News Network — a statically generated news aggregation site.",
+  "scripts": {
+    "predev": "node scripts/seed.mjs",
+    "dev": "next dev",
+    "prebuild": "node scripts/build-logo.mjs && node scripts/seed.mjs && node scripts/fetch-images.mjs",
+    "build": "next build",
+    "start": "npx serve out",
+    "lint": "next lint",
+    "seed": "node scripts/seed.mjs",
+    "seed:reset": "node scripts/seed.mjs --reset",
+    "logo": "node scripts/build-logo.mjs",
+    "images": "node scripts/fetch-images.mjs",
+    "images:force": "node scripts/fetch-images.mjs --force"
+  },
+  "dependencies": {
+    "next": "^15.5.19",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/sanitize-html": "^2.13.0",
+    "better-sqlite3": "^11.8.1",
+    "marked": "^15.0.6",
+    "sanitize-html": "^2.14.0",
+    "sharp": "^0.33.5",
+    "typescript": "^5.7.3"
+  }
+}
