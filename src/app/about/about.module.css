@@ -1,0 +1,15 @@
+.page {
+  padding-block: clamp(1.5rem, 1rem + 2vw, 2.75rem);
+}
+.head {
+  margin-bottom: clamp(1.5rem, 1rem + 2vw, 2.5rem);
+}
+.title {
+  font-size: var(--step-4);
+  font-weight: 900;
+  letter-spacing: -0.022em;
+  margin-top: 0.4rem;
+}
+.body {
+  max-width: 68ch;
+}
