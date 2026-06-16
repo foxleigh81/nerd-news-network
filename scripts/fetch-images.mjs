@@ -33,7 +33,7 @@ const UA =
 const db = new Database(DB_PATH);
 db.pragma('foreign_keys = ON');
 
-const isPlaceholder = (url) => !url || url.includes('picsum.photos') || url.startsWith('/images/');
+const isPlaceholder = (url) => !url || url.includes('picsum.photos');
 const rows = db
   .prepare('SELECT id, slug, headline, source_name, source_url, hero_image FROM articles ORDER BY id')
   .all()
