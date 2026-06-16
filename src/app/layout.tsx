@@ -7,6 +7,10 @@ import { Footer } from '@/components/Footer';
 import './globals.css';
 
 const ADSENSE_CLIENT = process.env.NEXT_PUBLIC_ADSENSE_CLIENT; // e.g. ca-pub-XXXXXXXXXXXX
+// Google Analytics 4 — must be a NEXT_PUBLIC_ var to reach the static client
+// bundle. Loaded only in production builds so local dev doesn't pollute stats.
+const GA_ID =
+  process.env.NODE_ENV === 'production' ? process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID : undefined;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
@@ -75,6 +79,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             crossOrigin="anonymous"
             src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`}
           />
+        ) : null}
+
+        {GA_ID ? (
+          <>
+            <Script
+              id="ga-loader"
+              strategy="afterInteractive"
+              src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+            />
+            <Script id="ga-init" strategy="afterInteractive">
+              {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}');`}
+            </Script>
+          </>
         ) : null}
       </body>
     </html>
