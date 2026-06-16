@@ -40,7 +40,8 @@ db.exec(`
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     slug        TEXT NOT NULL UNIQUE,
     name        TEXT NOT NULL,
-    description TEXT
+    description TEXT,
+    keywords    TEXT                               -- comma-separated topic terms; drives the daily task's topic-match score
   );
 
   CREATE TABLE IF NOT EXISTS articles (
@@ -71,6 +72,12 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_articles_category  ON articles(category_id);
   CREATE INDEX IF NOT EXISTS idx_articles_slug      ON articles(slug);
 
+  -- Idempotency / dedupe: a canonical source URL identifies a story uniquely, so
+  -- the daily task can never insert the same article twice (reruns converge).
+  -- Partial index → multiple rows may have NULL source_url (e.g. staff posts).
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_source_url
+    ON articles(source_url) WHERE source_url IS NOT NULL;
+
   -- Related articles, curated by the daily AI task. The frontend reads these;
   -- if an article has none, it falls back to recent articles (≤3 months).
   CREATE TABLE IF NOT EXISTS related_articles (
@@ -91,6 +98,23 @@ db.exec(`
     channel_id  TEXT,                              -- UC… id for the RSS/API feed (nullable; resolvable from handle)
     url         TEXT NOT NULL UNIQUE,              -- channel URL
     category_id INTEGER REFERENCES categories(id),
+    weight      INTEGER NOT NULL DEFAULT 3,        -- editorial priority; higher wins ranking ties (mirrors sources.weight)
+    active      INTEGER NOT NULL DEFAULT 1         -- 0 = paused, skip during the daily run
+  );
+
+  -- Curated written-news sources the daily task monitors. This is the FIXED
+  -- registry the task scrapes — it never free-roams the web. Each row is a
+  -- machine-readable feed (RSS/Atom/JSON) so the shape is stable even if the
+  -- publisher restyles their site. The task reads these feeds, ranks the
+  -- entries deterministically (recency + weight + topic match) and writes the
+  -- top stories per category as articles. See the README for the algorithm.
+  CREATE TABLE IF NOT EXISTS sources (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,                     -- publisher display name (aggregation credit)
+    feed_url    TEXT NOT NULL UNIQUE,              -- RSS/Atom/JSON feed the task reads
+    site_url    TEXT,                              -- publisher homepage
+    category_id INTEGER REFERENCES categories(id),
+    weight      INTEGER NOT NULL DEFAULT 3,        -- editorial priority; higher wins ranking ties
     active      INTEGER NOT NULL DEFAULT 1         -- 0 = paused, skip during the daily run
   );
 `);
@@ -103,6 +127,16 @@ if (!articleCols.includes('video_youtube_id')) {
 }
 if (!articleCols.includes('video_duration_seconds')) {
   db.exec('ALTER TABLE articles ADD COLUMN video_duration_seconds INTEGER');
+}
+
+// Same for columns added after the categories/channels tables first shipped.
+const categoryCols = db.prepare('PRAGMA table_info(categories)').all().map((c) => c.name);
+if (!categoryCols.includes('keywords')) {
+  db.exec('ALTER TABLE categories ADD COLUMN keywords TEXT');
+}
+const channelCols = db.prepare('PRAGMA table_info(youtube_channels)').all().map((c) => c.name);
+if (!channelCols.includes('weight')) {
+  db.exec('ALTER TABLE youtube_channels ADD COLUMN weight INTEGER NOT NULL DEFAULT 3');
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +159,7 @@ const CHANNELS = [
   { name: 'David Bombal', handle: '@davidbombal', channel_id: 'UCP7WmQ_U4GB3K51Od9QvM0w', url: 'https://www.youtube.com/@davidbombal', category: 'networking' },
 
   // Smart Homes (Foxy's Lab and Paul Hibbert requested)
-  { name: "Foxy's Lab", handle: null, channel_id: 'UC_blM3yCdvOSzxakaj3178w', url: 'https://www.youtube.com/channel/UC_blM3yCdvOSzxakaj3178w', category: 'smart-homes' },
+  { name: "Foxy's Lab", handle: null, channel_id: 'UC_blM3yCdvOSzxakaj3178w', url: 'https://www.youtube.com/channel/UC_blM3yCdvOSzxakaj3178w', category: 'smart-homes', weight: 10 },
   { name: 'Paul Hibbert', handle: '@paulhibbert', channel_id: 'UCYLnawaM-36HncBBUeWrlGA', url: 'https://www.youtube.com/@paulhibbert', category: 'smart-homes' },
   { name: 'Smart Home Solver', handle: '@SmartHomeSolver', channel_id: null, url: 'https://www.youtube.com/@SmartHomeSolver', category: 'smart-homes' },
   { name: 'Everything Smart Home', handle: '@EverythingSmartHome', channel_id: null, url: 'https://www.youtube.com/@EverythingSmartHome', category: 'smart-homes' },
@@ -150,8 +184,8 @@ const CHANNELS = [
 ];
 
 const insertChannel = db.prepare(
-  `INSERT OR IGNORE INTO youtube_channels (name, handle, channel_id, url, category_id, active)
-   VALUES (@name, @handle, @channel_id, @url, @category_id, 1)`
+  `INSERT OR IGNORE INTO youtube_channels (name, handle, channel_id, url, category_id, weight, active)
+   VALUES (@name, @handle, @channel_id, @url, @category_id, @weight, 1)`
 );
 function seedChannels(resolveCategoryId) {
   const tx = db.transaction(() => {
@@ -162,6 +196,73 @@ function seedChannels(resolveCategoryId) {
         channel_id: c.channel_id ?? null,
         url: c.url,
         category_id: resolveCategoryId(c.category) ?? null,
+        weight: c.weight ?? 3,
+      });
+    }
+  });
+  tx();
+}
+
+// ---------------------------------------------------------------------------
+// Curated written-news sources (≈4 per category) the daily task monitors.
+// These are the ONLY places the task scrapes for written stories — it ranks the
+// feed entries deterministically and never free-roams the web. `weight` is the
+// editorial priority used to break ranking ties (higher = preferred). Feed URLs
+// are a sensible starter set; the daily task should verify each still resolves.
+// ---------------------------------------------------------------------------
+const SOURCES = [
+  // AI
+  { name: 'MIT Technology Review — AI', feed_url: 'https://www.technologyreview.com/topic/artificial-intelligence/feed', site_url: 'https://www.technologyreview.com/', category: 'ai', weight: 5 },
+  { name: 'VentureBeat — AI', feed_url: 'https://venturebeat.com/category/ai/feed/', site_url: 'https://venturebeat.com/category/ai/', category: 'ai', weight: 3 },
+  { name: 'The Verge — AI', feed_url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml', site_url: 'https://www.theverge.com/ai-artificial-intelligence', category: 'ai', weight: 4 },
+  { name: 'Ars Technica — AI', feed_url: 'https://arstechnica.com/ai/feed/', site_url: 'https://arstechnica.com/ai/', category: 'ai', weight: 4 },
+
+  // Networking
+  { name: 'The Register — Networks', feed_url: 'https://www.theregister.com/networks/headlines.atom', site_url: 'https://www.theregister.com/networks/', category: 'networking', weight: 4 },
+  { name: 'Cloudflare Blog', feed_url: 'https://blog.cloudflare.com/rss/', site_url: 'https://blog.cloudflare.com/', category: 'networking', weight: 4 },
+  { name: 'APNIC Blog', feed_url: 'https://blog.apnic.net/feed/', site_url: 'https://blog.apnic.net/', category: 'networking', weight: 3 },
+  { name: 'Network World', feed_url: 'https://www.networkworld.com/feed/', site_url: 'https://www.networkworld.com/', category: 'networking', weight: 3 },
+
+  // Smart Homes (Foxy's Lab is our own blog — top priority; it has no RSS feed,
+  // so the daily task reads sitemap.xml and filters to /blog/ URLs by lastmod.)
+  { name: "Foxy's Lab", feed_url: 'https://www.foxyslab.com/sitemap.xml', site_url: 'https://www.foxyslab.com/blog', category: 'smart-homes', weight: 10 },
+  { name: 'The Verge — Smart Home', feed_url: 'https://www.theverge.com/rss/smart-home/index.xml', site_url: 'https://www.theverge.com/smart-home', category: 'smart-homes', weight: 4 },
+  { name: 'Stacey on IoT', feed_url: 'https://staceyoniot.com/feed/', site_url: 'https://staceyoniot.com/', category: 'smart-homes', weight: 4 },
+  { name: 'Home Assistant Blog', feed_url: 'https://www.home-assistant.io/atom.xml', site_url: 'https://www.home-assistant.io/blog/', category: 'smart-homes', weight: 3 },
+  { name: 'HomeKit News', feed_url: 'https://homekitnews.com/feed/', site_url: 'https://homekitnews.com/', category: 'smart-homes', weight: 2 },
+
+  // Gaming
+  { name: 'Eurogamer', feed_url: 'https://www.eurogamer.net/feed', site_url: 'https://www.eurogamer.net/', category: 'gaming', weight: 4 },
+  { name: 'Polygon', feed_url: 'https://www.polygon.com/rss/index.xml', site_url: 'https://www.polygon.com/', category: 'gaming', weight: 4 },
+  { name: 'PC Gamer', feed_url: 'https://www.pcgamer.com/rss/', site_url: 'https://www.pcgamer.com/', category: 'gaming', weight: 3 },
+  { name: 'Rock Paper Shotgun', feed_url: 'https://www.rockpapershotgun.com/feed', site_url: 'https://www.rockpapershotgun.com/', category: 'gaming', weight: 3 },
+
+  // Science
+  { name: 'Quanta Magazine', feed_url: 'https://www.quantamagazine.org/feed/', site_url: 'https://www.quantamagazine.org/', category: 'science', weight: 5 },
+  { name: 'ScienceDaily — Top Science', feed_url: 'https://www.sciencedaily.com/rss/top/science.xml', site_url: 'https://www.sciencedaily.com/', category: 'science', weight: 3 },
+  { name: 'Space.com', feed_url: 'https://www.space.com/feeds/all', site_url: 'https://www.space.com/', category: 'science', weight: 4 },
+  { name: 'Phys.org', feed_url: 'https://phys.org/rss-feed/', site_url: 'https://phys.org/', category: 'science', weight: 3 },
+
+  // Technology
+  { name: 'Ars Technica', feed_url: 'https://feeds.arstechnica.com/arstechnica/index', site_url: 'https://arstechnica.com/', category: 'technology', weight: 5 },
+  { name: 'The Verge', feed_url: 'https://www.theverge.com/rss/index.xml', site_url: 'https://www.theverge.com/', category: 'technology', weight: 4 },
+  { name: 'TechCrunch', feed_url: 'https://techcrunch.com/feed/', site_url: 'https://techcrunch.com/', category: 'technology', weight: 3 },
+  { name: 'Engadget', feed_url: 'https://www.engadget.com/rss.xml', site_url: 'https://www.engadget.com/', category: 'technology', weight: 3 },
+];
+
+const insertSource = db.prepare(
+  `INSERT OR IGNORE INTO sources (name, feed_url, site_url, category_id, weight, active)
+   VALUES (@name, @feed_url, @site_url, @category_id, @weight, 1)`
+);
+function seedSources(resolveCategoryId) {
+  const tx = db.transaction(() => {
+    for (const s of SOURCES) {
+      insertSource.run({
+        name: s.name,
+        feed_url: s.feed_url,
+        site_url: s.site_url ?? null,
+        category_id: resolveCategoryId(s.category) ?? null,
+        weight: s.weight ?? 3,
       });
     }
   });
@@ -172,15 +273,21 @@ const reset = process.argv.includes('--reset');
 const existing = db.prepare('SELECT COUNT(*) AS n FROM articles').get().n;
 
 if (existing > 0 && !reset) {
-  // Ensure the monitored-channel list is present even when article content
-  // already exists (e.g. a production DB gaining this feature for the first time).
+  // Ensure the monitored channel + source registries are present even when
+  // article content already exists (e.g. a production DB gaining these features
+  // for the first time). Both seeds are INSERT OR IGNORE, so this is safe to run.
+  const catBySlug = Object.fromEntries(
+    db.prepare('SELECT slug, id FROM categories').all().map((c) => [c.slug, c.id])
+  );
   const channelCount = db.prepare('SELECT COUNT(*) AS n FROM youtube_channels').get().n;
   if (channelCount === 0) {
-    const catBySlug = Object.fromEntries(
-      db.prepare('SELECT slug, id FROM categories').all().map((c) => [c.slug, c.id])
-    );
     seedChannels((slug) => catBySlug[slug]);
     console.log(`[seed] Seeded ${CHANNELS.length} YouTube channels into existing database.`);
+  }
+  const sourceCount = db.prepare('SELECT COUNT(*) AS n FROM sources').get().n;
+  if (sourceCount === 0) {
+    seedSources((slug) => catBySlug[slug]);
+    console.log(`[seed] Seeded ${SOURCES.length} news sources into existing database.`);
   }
   console.log(
     `[seed] DB already has ${existing} article(s); schema ensured, leaving data untouched.`
@@ -191,24 +298,46 @@ if (existing > 0 && !reset) {
 
 if (reset) {
   console.log('[seed] --reset: clearing existing content.');
-  db.exec('DELETE FROM related_articles; DELETE FROM articles; DELETE FROM youtube_channels; DELETE FROM categories;');
-  db.exec("DELETE FROM sqlite_sequence WHERE name IN ('articles','categories','youtube_channels');");
+  db.exec('DELETE FROM related_articles; DELETE FROM articles; DELETE FROM youtube_channels; DELETE FROM sources; DELETE FROM categories;');
+  db.exec("DELETE FROM sqlite_sequence WHERE name IN ('articles','categories','youtube_channels','sources');");
 }
 
 // ---------------------------------------------------------------------------
 // Categories — order here defines the nav order (see getCategories).
 // ---------------------------------------------------------------------------
+// `keywords` is a comma-separated topic vocabulary per section. The daily task
+// scores each candidate story by how many of its category's keywords it matches
+// (in the headline/summary) — this is the deterministic "topic match" signal,
+// derived straight from the sections we already publish.
 const CATEGORIES = [
-  { slug: 'ai', name: 'AI', description: 'Machine learning, models and the automated age.' },
-  { slug: 'networking', name: 'Networking', description: 'Connectivity, wireless standards and the plumbing of the internet.' },
-  { slug: 'smart-homes', name: 'Smart Homes', description: 'Connected devices, hubs and home automation.' },
-  { slug: 'gaming', name: 'Gaming', description: 'Games, consoles, showcases and the industry behind them.' },
-  { slug: 'science', name: 'Science', description: 'Research, discovery and the cosmos explained.' },
-  { slug: 'technology', name: 'Technology', description: 'Hardware, software, security and the people building it.' },
+  {
+    slug: 'ai', name: 'AI', description: 'Machine learning, models and the automated age.',
+    keywords: 'artificial intelligence, machine learning, deep learning, neural network, large language model, LLM, generative AI, GPT, chatbot, AI model, training, inference, OpenAI, Anthropic, diffusion, transformer, AI agent',
+  },
+  {
+    slug: 'networking', name: 'Networking', description: 'Connectivity, wireless standards and the plumbing of the internet.',
+    keywords: 'networking, network, router, switch, Wi-Fi, WiFi, ethernet, VPN, firewall, BGP, DNS, bandwidth, latency, ISP, broadband, fibre, fiber, 5G, protocol, packet, IP address',
+  },
+  {
+    slug: 'smart-homes', name: 'Smart Homes', description: 'Connected devices, hubs and home automation.',
+    keywords: 'smart home, home automation, Home Assistant, Matter, Thread, Zigbee, Z-Wave, HomeKit, Alexa, Google Home, smart bulb, smart plug, smart lock, smart speaker, sensor, hub, IoT',
+  },
+  {
+    slug: 'gaming', name: 'Gaming', description: 'Games, consoles, showcases and the industry behind them.',
+    keywords: 'game, gaming, video game, console, PlayStation, PS5, Xbox, Nintendo, Switch, PC gaming, GPU, frame rate, FPS, RPG, esports, Steam, game release, demo',
+  },
+  {
+    slug: 'science', name: 'Science', description: 'Research, discovery and the cosmos explained.',
+    keywords: 'science, research, study, physics, astronomy, space, telescope, quantum, biology, chemistry, climate, discovery, NASA, experiment, exoplanet, particle',
+  },
+  {
+    slug: 'technology', name: 'Technology', description: 'Hardware, software, security and the people building it.',
+    keywords: 'technology, hardware, software, chip, processor, semiconductor, cybersecurity, security, gadget, laptop, smartphone, cloud, app, startup, silicon, battery',
+  },
 ];
 
 const insertCategory = db.prepare(
-  'INSERT INTO categories (slug, name, description) VALUES (@slug, @name, @description)'
+  'INSERT INTO categories (slug, name, description, keywords) VALUES (@slug, @name, @description, @keywords)'
 );
 const categoryIds = {};
 for (const c of CATEGORIES) {
@@ -217,6 +346,7 @@ for (const c of CATEGORIES) {
 }
 
 seedChannels((slug) => categoryIds[slug]);
+seedSources((slug) => categoryIds[slug]);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1328,6 +1458,351 @@ const ARTICLES = [
     ],
     sections: [
       S('Why it matters', 'South Korea’s chip and manufacturing strength makes it a strategic hub for Nvidia’s AI ambitions.'),
+    ],
+  }),
+
+  // ============== LAUNCH BALANCE: real, deep-linked stories added so each ==============
+  // ============== section ships with equal coverage (Networking/Gaming/Smart Homes) ===
+
+  // ----- Networking -----
+  article({
+    headline: 'Cloudflare service outage June 12, 2025',
+    blurb:
+      'A third-party cloud storage failure knocked out Cloudflare’s Workers KV service for nearly two and a half hours, cascading into outages across Access, WARP, the dashboard and many dependent products.',
+    category: 'networking', source: 'Cloudflare Blog',
+    sourceUrl: 'https://blog.cloudflare.com/cloudflare-service-outage-june-12-2025/',
+    publishedAt: '2025-06-12T09:00:00Z', imageSeed: 98,
+    intro:
+      'On 12 June 2025 Cloudflare suffered a 2 hour 28 minute outage when the storage backing its Workers KV service failed, taking down a long list of services that rely on it.',
+    keyPoints: [
+      'The incident ran from 17:52 UTC to 20:28 UTC, lasting 2 hours and 28 minutes.',
+      'Root cause was a failure in the underlying storage for Workers KV, part of which is hosted by a third-party cloud provider that had its own outage.',
+      'Workers KV saw a roughly 90.22% request failure rate at the peak of the incident.',
+      'Affected services included Access (100% login failures), WARP device registration, Gateway, the dashboard, Turnstile, Workers AI and Stream.',
+      'Core data-plane services such as DNS, Cache, the proxy, WAF, Magic Transit and Magic WAN were not directly impacted.',
+      'Cloudflare confirmed no customer data was lost as a result of the incident.',
+    ],
+    sections: [
+      S('Why it matters', 'The outage is a textbook example of concentration risk: a single shared dependency (Workers KV) backed by an external provider became a single point of failure that rippled through dozens of otherwise unrelated Cloudflare products. It underlines how much of the modern internet’s control plane sits behind a handful of platform services.'),
+    ],
+  }),
+  article({
+    headline: 'Boffins say tool can sniff 5G traffic, launch ‘attacks’ without using rogue base stations',
+    blurb:
+      'Researchers in Singapore released Sni5Gect, an open-source framework that can intercept pre-authentication 5G traffic and inject attack payloads using cheap radio gear, without needing a fake base station.',
+    category: 'networking', source: 'The Register',
+    sourceUrl: 'https://www.theregister.com/2025/08/18/sni5gect/',
+    publishedAt: '2025-08-18T11:45:00Z', imageSeed: 99,
+    intro:
+      'A team at the Singapore University of Technology and Design has published a tool that sniffs 5G traffic and injects packets in real time, sidestepping the rogue base stations that earlier attacks required.',
+    keyPoints: [
+      'The tool, Sni5Gect, was built by researchers at the Singapore University of Technology and Design.',
+      'It intercepts pre-authentication 5G communications and injects payloads into downlink transmissions to handsets.',
+      'Reported results include 80%+ sniffing accuracy and a 70–90% packet injection success rate.',
+      'It can perform novel 5G-to-4G downgrade attacks, denial-of-service and device fingerprinting.',
+      'Attacks work at up to 20 metres using consumer-grade software-defined radio hardware.',
+      'Released on GitHub under the AGPL 3 for research and education; GSMA assigned vulnerability ID CVD-2024-0096.',
+    ],
+    sections: [
+      S('Why it matters', 'Previous practical 5G attacks generally depended on operating a rogue base station, a comparatively visible and resource-heavy approach. By relying on off-the-shelf software-defined radios instead, Sni5Gect lowers the bar for intercepting and manipulating early 5G handshakes, raising fresh questions about pre-authentication signalling and forced downgrades onto older, weaker network generations.'),
+    ],
+  }),
+  article({
+    headline: 'London ISP Community Fibre Deploy New Linksys WiFi 7 Broadband Routers',
+    blurb:
+      'London full-fibre ISP Community Fibre has begun rolling out a new tri-band Linksys Wi-Fi 7 router to customers on its faster multi-gigabit packages.',
+    category: 'networking', source: 'ISPreview UK',
+    sourceUrl: 'https://www.ispreview.co.uk/index.php/2025/12/london-isp-community-fibre-deploy-new-linksys-wifi-7-broadband-routers.html',
+    publishedAt: '2025-12-04T09:00:00Z', imageSeed: 100,
+    intro:
+      'Community Fibre is deploying the Linksys SPNM62CF Wi-Fi 7 router to new subscribers on its 2.5Gbps and 5Gbps plans as part of its multi-gigabit network push across London.',
+    keyPoints: [
+      'The new hardware is the Linksys SPNM62CF, a tri-band BE11000-class Wi-Fi 7 router.',
+      'It provides 2× 2.5Gbps LAN ports and 2× 10Gbps LAN ports, one of which doubles as the WAN port, plus USB-C power.',
+      'The router is going to new customers on the 2.5Gbps and 5Gbps speed tiers.',
+      'Community Fibre says it has invested around £1bn to build a 5Gbps FTTP network reaching 1.342 million UK homes, mainly in London.',
+      'A promotion offered a free £50 Xbox voucher with 2.5Gbps symmetric packages.',
+      'Pricing started from £39/month on 24-month terms with free installation.',
+    ],
+    sections: [
+      S('Why it matters', 'Bundling a Wi-Fi 7 router with multi-gigabit fibre tiers reflects a broader shift among UK altnets: raw line speed has outrun what older in-home Wi-Fi can deliver, so providers are upgrading the gateway hardware to stop the home network becoming the bottleneck. With 10Gbps LAN ports, Community Fibre is also signalling headroom beyond its current top 5Gbps package.'),
+    ],
+  }),
+  article({
+    headline: 'BGP in 2025',
+    blurb:
+      'Geoff Huston’s annual review of the global routing table finds continued but slowing growth through 2025, with the IPv4 table approaching 1.05 million prefixes and IPv6 nearing 242,000.',
+    category: 'networking', source: 'APNIC Blog',
+    sourceUrl: 'https://blog.apnic.net/2026/01/08/bgp-in-2025/',
+    publishedAt: '2026-01-08T09:00:00Z', imageSeed: 101,
+    intro:
+      'APNIC’s annual BGP analysis examines how the internet’s routing table changed over 2025, reporting modest growth in both IPv4 and IPv6 and a longer-term deceleration in expansion.',
+    keyPoints: [
+      'By January 2026 the IPv4 routing table held roughly 1,050,000 prefixes, up about 54,000 (5%) over 2025.',
+      'The IPv6 table reached approximately 241,800 prefixes, growing around 20,300 (9%) during the year.',
+      'Total IPv4 advertised address span stayed roughly flat at about 3.1 billion addresses.',
+      'Autonomous system counts rose to about 77,900 in IPv4 (2% growth) and 36,100 in IPv6 (5% growth).',
+      'The author attributes slowing growth to market saturation, hardware limits and the rise of CDNs reducing routing demand.',
+      'The analysis was written by APNIC Chief Scientist Geoff Huston.',
+    ],
+    sections: [
+      S('Why it matters', 'The global BGP table is the backbone map every internet router must carry, and its size and churn directly shape hardware requirements and routing stability worldwide. Huston’s finding that growth is decelerating, rather than spiralling, is reassuring for operators worried about table bloat, while steady IPv6 expansion shows the long migration continuing without dramatic acceleration.'),
+    ],
+  }),
+
+  // ----- Gaming -----
+  article({
+    headline: 'The Nintendo Switch 2 has already smashed a sales record, with 3.5 million units shifted in just four days',
+    blurb:
+      'Nintendo’s Switch 2 moved more than 3.5 million units in its first four days on sale, making it the company’s fastest-launching console ever.',
+    category: 'gaming', source: 'TechRadar',
+    sourceUrl: 'https://www.techradar.com/gaming/nintendo-switch/the-nintendo-switch-2-has-already-smashed-a-sales-record-with-3-5-million-units-shifted-in-just-four-days',
+    publishedAt: '2025-06-11T09:00:00Z', imageSeed: 102,
+    intro:
+      'Just days after its June 5 debut, the Switch 2 has rewritten Nintendo’s launch record books, comfortably outpacing the original Switch and even the Wii.',
+    keyPoints: [
+      'Switch 2 sold over 3.5 million units worldwide in the four days after its June 5, 2025 launch.',
+      'That makes it the fastest-selling Nintendo console in the company’s history.',
+      'By comparison, the original Switch managed roughly 2.74 million units across its entire launch month.',
+      'Analyst Mat Piscatella cautioned that early console figures are heavily shaped by how much stock is available.',
+      'Nintendo stocked far more Switch 2 units at launch than it did for the original Switch.',
+      'The launch outpaced previous Nintendo hits including the Wii and the DS.',
+    ],
+    sections: [
+      S('Why it matters', 'A record-breaking opening week signals enormous pent-up demand for Nintendo’s next-generation hardware and sets an aggressive baseline for the console’s lifecycle. With supply rather than interest looking like the main constraint, the numbers suggest Nintendo could sustain momentum well beyond launch if it can keep units on shelves.'),
+    ],
+  }),
+  article({
+    headline: 'Hollow Knight: Silksong Release Date is Now Official',
+    blurb:
+      'After years of near-silence, Team Cherry confirmed that the long-awaited Hollow Knight sequel Silksong will launch on September 4, 2025 across all major platforms.',
+    category: 'gaming', source: 'Game Rant',
+    sourceUrl: 'https://gamerant.com/hollow-knight-silksong-release-date-september-2025/',
+    publishedAt: '2025-08-21T14:55:00Z', imageSeed: 103,
+    intro:
+      'One of gaming’s most anticipated and most-delayed titles finally has a firm release date, ending a wait that stretches back to the game’s 2019 reveal.',
+    keyPoints: [
+      'Hollow Knight: Silksong launches Thursday, September 4, 2025.',
+      'It releases across PC, PlayStation, Xbox, and Nintendo Switch and Switch 2.',
+      'The game will be available day one on Xbox Game Pass Ultimate.',
+      'Silksong features more than 200 enemies and over 40 bosses.',
+      'Fans had waited since the sequel’s 2019 announcement, with Team Cherry staying largely quiet until a 2025 confirmation at Gamescom.',
+      'The hand-drawn Metroidvania follows protagonist Hornet and blends platforming with Soulslike difficulty.',
+    ],
+    sections: [
+      S('Why it matters', 'Silksong became a running joke about vaporware after years of delays and silence, so a concrete, near-term date is a major moment for the indie scene and for the millions who wishlisted it. Launching directly into Game Pass also guarantees an enormous day-one audience and underscores how influential the original Hollow Knight remains.'),
+    ],
+  }),
+  article({
+    headline: '‘GTA 6’ Release Delayed to November 2026',
+    blurb:
+      'Take-Two and Rockstar pushed Grand Theft Auto VI from May 2026 to November 19, 2026, a six-month slip announced during the publisher’s quarterly earnings.',
+    category: 'gaming', source: 'Variety',
+    sourceUrl: 'https://variety.com/2025/gaming/news/gta-6-release-delayed-november-2026-1236571679/',
+    publishedAt: '2025-11-06T21:07:00Z', imageSeed: 104,
+    intro:
+      'Rockstar’s hugely anticipated open-world sequel has been delayed again, with the studio asking for more time to polish the game.',
+    keyPoints: [
+      'GTA 6 moves from May 26, 2026 to November 19, 2026.',
+      'The six-month delay was announced alongside Take-Two’s quarterly earnings.',
+      'Take-Two CEO Strauss Zelnick said the company remains confident in delivering an “unrivalled blockbuster entertainment experience”.',
+      'Rockstar said the extra months will let it “finish the game with the level of polish you have come to expect and deserve”.',
+      'The game is set in the state of Leonida and marks a return to modern-day Vice City.',
+      'This is the second delay for the title, which was originally targeted for fall 2025.',
+    ],
+    sections: [
+      S('Why it matters', 'GTA 6 is expected to be one of the best-selling entertainment products of all time, so its timing reshapes release calendars across the entire industry as rivals avoid clashing with it. A second delay also intensifies scrutiny of Rockstar’s development pace and the pressure on Take-Two to deliver on sky-high expectations.'),
+    ],
+  }),
+  article({
+    headline: 'The PS5 is getting more expensive… again',
+    blurb:
+      'Sony raised prices across the PS5 lineup again, citing global economic pressures, with the standard console jumping to $650 from April 2, 2026.',
+    category: 'gaming', source: 'Engadget',
+    sourceUrl: 'https://www.engadget.com/gaming/playstation/the-ps5-is-getting-more-expensive-again-133141514.html',
+    publishedAt: '2026-03-27T14:31:00Z', imageSeed: 105,
+    intro:
+      'For the second time in under a year, Sony is hiking the cost of PlayStation 5 hardware and accessories in the US.',
+    keyPoints: [
+      'New US prices take effect April 2, 2026.',
+      'Standard PS5 with disc drive rises $100 to $650.',
+      'PS5 Digital Edition rises $100 to $600; PS5 Pro rises $150 to $900.',
+      'The PlayStation Portal goes up $50 to $250.',
+      'Sony blamed “continued pressures in the global economic landscape”.',
+      'It marks the second PS5 price increase in less than a year, following an August 2025 hike.',
+    ],
+    sections: [
+      S('Why it matters', 'Mid-generation price increases are unusual and signal how supply-chain costs, currency swings and component shortages are squeezing the console business. Repeated hikes risk dampening demand and shifting value-conscious players toward Game Pass, PC or cheaper handhelds at a moment when several platform holders are all raising prices.'),
+    ],
+  }),
+  article({
+    headline: 'Ghost Of Yotei Sold Almost Three Times More Copies Than Death Stranding 2',
+    blurb:
+      'New figures show Sucker Punch’s Ghost of Yotei vastly outsold other 2025 PS5 exclusives, moving 4.8 million copies versus Death Stranding 2’s 1.7 million.',
+    category: 'gaming', source: 'TheGamer',
+    sourceUrl: 'https://www.thegamer.com/ghost-of-yotei-triple-death-stranding-2-sales/',
+    publishedAt: '2026-06-15T09:09:00Z', imageSeed: 106,
+    intro:
+      'Sales data underscores Ghost of Yotei as the standout PlayStation exclusive of the period, dwarfing its closest first-party rivals.',
+    keyPoints: [
+      'Ghost of Yotei sold around 4.8 million units, generating close to $350 million in revenue.',
+      'Death Stranding 2 sold roughly 1.7 million PS5 units, about a third of Yotei’s total.',
+      'Average playtime for Yotei was 47.7 hours, with 7% of players exceeding 100 hours.',
+      'Other PS5 exclusives trailed far behind: MLB The Show 26 at 745,000 and Saros at 406,000.',
+      'Bungie’s Marathon performed poorly with about 347,000 PlayStation copies.',
+      'On PS5, the game was reportedly only outsold by Madden and College Football titles.',
+    ],
+    sections: [
+      S('Why it matters', 'The gap highlights how Sony’s open-world single-player exclusives continue to drive hardware and revenue even in a year of high-profile competition. The contrast with Death Stranding 2 and the weak showing from live-service bet Marathon also feeds the ongoing debate about whether premium narrative games remain a safer investment than online-focused titles.'),
+    ],
+  }),
+
+  // ----- Smart Homes (incl. two Foxy’s Lab posts) -----
+  article({
+    headline: 'Getting Started with Home Assistant on a Mini PC',
+    blurb:
+      'A hands-on walkthrough for turning an x86 mini PC into a fully local Home Assistant smart home hub, from flashing the OS to building your first automations.',
+    category: 'smart-homes', source: "Foxy's Lab",
+    sourceUrl: 'https://www.foxyslab.com/blog/getting-started-with-home-assistant',
+    publishedAt: '2026-04-18T09:00:00Z', imageSeed: 107,
+    intro:
+      'This tutorial takes a blank mini PC and turns it into a complete, cloud-free Home Assistant setup, covering installation, device pairing and advanced automation tooling.',
+    keyPoints: [
+      'Installs Home Assistant OS on x86 hardware by booting Ubuntu from USB and restoring the HA disk image with the Disks utility.',
+      'Notes the x86 install is far more convoluted than the simpler Raspberry Pi route.',
+      'Uses a Sonoff ZB Dongle E Zigbee coordinator to pair devices like buttons and bulbs.',
+      'Walks through account setup, locations and organising the home into floors and areas.',
+      'Covers HACS for community add-ons, Node-RED for visual automation, the mobile companion app and weather integrations.',
+      'Emphasises everything runs locally with no cloud dependency or terms-of-service risk.',
+    ],
+    sections: [
+      S('Why it matters', 'Running a smart home entirely on local hardware gives owners full control over their data and automations without relying on external services that can change pricing or shut down. By documenting the awkward x86 install path step by step, the guide lowers the barrier for repurposing cheap mini PCs into capable, private home automation servers.'),
+    ],
+  }),
+  article({
+    headline: 'Well, This Looks Different',
+    blurb:
+      'Foxy’s Lab launches a written blog as a companion to its YouTube channel, aimed at deeper dives, quick shares and tutorial content that works better as text.',
+    category: 'smart-homes', source: "Foxy's Lab",
+    sourceUrl: 'https://www.foxyslab.com/blog/well-this-looks-different',
+    publishedAt: '2026-04-17T09:00:00Z', imageSeed: 108,
+    intro:
+      'This introductory post explains why Foxy’s Lab is adding a blog alongside its videos and what readers can expect from the written format.',
+    keyPoints: [
+      'The blog is positioned as a companion to the YouTube channel, not a replacement.',
+      'Creator Alexander Foxleigh is a long-time writer who previously ran a personal blog called Foxy’s Tale from around 2010.',
+      'Text format suits tutorials with copyable commands, quick shares and topics that don’t justify a full video.',
+      'Promises to keep the channel’s values: personal testing, transparency about cloud-only products and honesty about knowledge gaps.',
+      'Major off-topic content will stay on the original Foxy’s Tale blog.',
+      'An on-site comments section is planned, with engagement via Discord and YouTube in the meantime.',
+    ],
+    sections: [
+      S('Why it matters', 'Many smart home creators are video-first, but written guides remain the most practical format for step-by-step setups where readers need to copy commands and revisit details. Launching a companion blog signals a more reference-friendly approach to the channel’s coverage, with the first article tackling a Home Assistant mini PC build.'),
+    ],
+  }),
+  article({
+    headline: '2026.5: We’re on the same frequency now 📡',
+    blurb:
+      'Home Assistant 2026.5 makes radio-frequency control a first-class feature, adds serial-port proxying over the network and expands its built-in maintenance and security dashboards.',
+    category: 'smart-homes', source: 'Home Assistant',
+    sourceUrl: 'https://www.home-assistant.io/blog/2026/05/06/release-20265/',
+    publishedAt: '2026-05-06T09:00:00Z', imageSeed: 109,
+    intro:
+      'The May 2026 release brings native RF control alongside infrared, network serial proxying via ESPHome and a wave of dashboard and automation improvements.',
+    keyPoints: [
+      'RF becomes a first-class platform for controlling blinds, garage doors, ceiling fans and wireless outlets.',
+      'Two RF transmitters launch immediately: ESPHome with a roughly $10 CC1101 sub-GHz module, and the Broadlink RM4 Pro.',
+      'ESPHome devices can now proxy serial connections over the network, with a migration from pyserial to the serialx library.',
+      'A new Maintenance dashboard auto-discovers battery entities by area and highlights low batteries.',
+      '12 new integrations added, with six reaching platinum quality and notable upgrades to Matter, MQTT and UniFi Protect.',
+      'Backward-incompatible changes remove several Person/Device Tracker home-presence triggers and conditions.',
+    ],
+    sections: [
+      S('Why it matters', 'Adding native RF support extends Home Assistant’s reach to a large category of cheap, unconnected devices that previously needed bespoke bridges, while serial proxying over ESPHome removes the need to physically tether hardware to the server. Together they push more of the smart home onto a single local platform.'),
+    ],
+  }),
+  article({
+    headline: '2026.2: Home, sweet overview',
+    blurb:
+      'Home Assistant 2026.2 makes the new Home dashboard the default, renames add-ons to apps and launches a community-powered device database to help users pick compatible hardware.',
+    category: 'smart-homes', source: 'Home Assistant',
+    sourceUrl: 'https://www.home-assistant.io/blog/2026/02/04/release-20262/',
+    publishedAt: '2026-02-04T09:00:00Z', imageSeed: 110,
+    intro:
+      'The February 2026 release focuses on onboarding clarity, with a redesigned default dashboard, simplified terminology and a new open device database.',
+    keyPoints: [
+      'The Home Dashboard replaces the old Overview as the default, with the previous version kept as Overview (legacy).',
+      'A new Open Home Foundation device database launched with over 10,000 unique devices across more than 260 integrations.',
+      'The database uses opt-in, anonymised data and collects no personal information.',
+      'Add-ons are renamed apps to reduce confusion for newcomers.',
+      'Quick search (Ctrl/Cmd + K) is fully redesigned for unified access to entities, devices, areas and commands.',
+      'Six new integrations added, including Cloudflare R2, HDFury and NRGkick.',
+    ],
+    sections: [
+      S('Why it matters', 'A community device database directly tackles one of the smart home’s biggest pain points: knowing whether a given product actually works before buying it. Combined with a friendlier default dashboard and clearer terminology, the release is aimed squarely at making Home Assistant less intimidating for new users.'),
+    ],
+  }),
+  article({
+    headline: 'Eufy Announces Three New Smart Locks with Matter Support',
+    blurb:
+      'Eufy expands its FamiLock range with three Matter-compatible smart locks spanning facial recognition, palm-vein scanning and a conventional fingerprint model with Matter over Thread.',
+    category: 'smart-homes', source: 'Homekit News',
+    sourceUrl: 'https://homekitnews.com/2026/06/11/eufy-announces-three-new-smart-locks-with-matter-support/',
+    publishedAt: '2026-06-11T09:00:00Z', imageSeed: 111,
+    intro:
+      'Eufy unveiled the FamiLock E40, E35 and E32, all supporting Matter for integration across Apple Home, Alexa, Google Home and SmartThings.',
+    keyPoints: [
+      'The flagship FamiLock E40 combines a smart lock, 2K video doorbell and security camera, with facial recognition and locally stored facial data.',
+      'The E40 has a 135-degree field of view, a 60GHz radar sensor to cut false alerts, and a 15,000mAh battery plus 800mAh backup.',
+      'The FamiLock E35 (sold as E34 in some regions) uses palm-vein recognition in about 0.6 seconds, with built-in Wi-Fi and a 10,000mAh battery rated for up to eight months.',
+      'The conventional FamiLock E32 offers fingerprint, keypad and physical-key entry and supports Matter over Thread.',
+      'All three locks work with Apple Home, Amazon Alexa, Google Home, Samsung SmartThings and other Matter platforms.',
+      'No pricing or specific availability dates were given in the announcement.',
+    ],
+    sections: [
+      S('Why it matters', 'Matter support across an entire lock lineup makes it easier to mix Eufy hardware into any major ecosystem without being tied to one app. The inclusion of Matter over Thread on the entry model, alongside biometric options like palm-vein scanning higher up the range, shows how quickly low-power standards and advanced access methods are reaching mainstream smart locks.'),
+    ],
+  }),
+  article({
+    headline: 'Aqara Presence Multi-Sensor FP300 (review)',
+    blurb:
+      'A review of Aqara’s wire-free FP300 multi-sensor, which packs motion, presence, temperature, humidity and light sensing with a choice of Matter over Thread or Zigbee.',
+    category: 'smart-homes', source: 'Homekit News',
+    sourceUrl: 'https://homekitnews.com/2025/12/15/aqara-presence-multi-sensor-fp300-review/',
+    publishedAt: '2025-12-15T09:00:00Z', imageSeed: 112,
+    intro:
+      'The FP300 combines five sensors in a battery-powered, cable-free package and earns a strong score, with the reviewer favouring Zigbee over Thread for reliability.',
+    keyPoints: [
+      'Combines PIR motion, mmWave presence, temperature, humidity and ambient-light sensing in one wire-free device.',
+      'Runs on two CR2450 coin cells, rated around two years on Thread and three years on Zigbee.',
+      'Offers a choice of Matter over Thread or Zigbee 3.0 connectivity.',
+      'Configurable sensitivity, absence-delay timers from 10 seconds to 5 minutes, and adjustable reporting frequency.',
+      'The reviewer chose Zigbee for better reliability and notes Matter over Thread limits customisation in the Aqara app.',
+      'Scored 8.7/10, best suited to small-to-medium rooms, with the FP2 preferred for open-plan multi-zone spaces.',
+    ],
+    sections: [
+      S('Why it matters', 'Presence sensors are central to responsive automations that react to people rather than just movement, and a fully wire-free design removes the usual cable clutter. The review also highlights a recurring trade-off in current hardware: Matter over Thread brings interoperability but can still lag behind native Zigbee for fine-grained control and reliability.'),
+    ],
+  }),
+  article({
+    headline: 'IKEA acknowledges connectivity problems with budget Matter-over-Thread devices',
+    blurb:
+      'IKEA has confirmed widespread pairing problems with its new low-cost Matter-over-Thread smart home devices after testers and customers struggled to connect them.',
+    category: 'smart-homes', source: '9to5Mac',
+    sourceUrl: 'https://9to5mac.com/2026/02/05/ikea-acknowledges-connectivity-problems-with-budget-matter-over-thread-devices/',
+    publishedAt: '2026-02-05T09:00:00Z', imageSeed: 113,
+    intro:
+      'Following reports of devices failing to pair or dropping off networks, IKEA acknowledged the connectivity issues and said it is investigating with ecosystem partners.',
+    keyPoints: [
+      'Affected products include the Kajplats smart lightbulb and Alpstuga IAQ monitor among others.',
+      'One reviewer connected only 1 of 6 devices to Apple Home, and only after seven attempts.',
+      'A frustrated buyer reported roughly 50% pairing failure rates, with some devices vanishing after initial setup.',
+      'Problems spanned Apple Home, Amazon, Google Home and Home Assistant.',
+      'IKEA smart home product manager David Granath confirmed awareness, citing connection issues in certain home environments.',
+      'IKEA is working with a dedicated team and the Connectivity Standards Alliance, and notes devices stay in pairing mode for only 15 minutes.',
+    ],
+    sections: [
+      S('Why it matters', 'IKEA’s cheap Matter-over-Thread range was meant to make standards-based smart home gear genuinely affordable, so its rocky launch is a high-profile test of whether Matter delivers on its promise of easy, reliable interoperability. The breadth of the pairing failures across every major ecosystem points to growing pains in the standard rather than a single vendor’s bug.'),
     ],
   }),
 ];

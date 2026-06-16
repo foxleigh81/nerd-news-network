@@ -1,8 +1,20 @@
 import type { Metadata } from 'next';
 import { SITE } from '@/lib/site';
-import { getYoutubeChannels } from '@/lib/db';
+import { getYoutubeChannels, getSources } from '@/lib/db';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import styles from './about.module.css';
+
+/** Group rows that carry a joined `category_name` into per-category buckets,
+ *  preserving the query order the DB returned them in. */
+function groupByCategory<T extends { category_name: string | null }>(rows: T[]): [string, T[]][] {
+  const byCategory = new Map<string, T[]>();
+  for (const row of rows) {
+    const key = row.category_name ?? 'Other';
+    if (!byCategory.has(key)) byCategory.set(key, []);
+    byCategory.get(key)!.push(row);
+  }
+  return [...byCategory.entries()];
+}
 
 export const metadata: Metadata = {
   title: 'About',
@@ -11,14 +23,8 @@ export const metadata: Metadata = {
 };
 
 export default function AboutPage() {
-  const channels = getYoutubeChannels();
-  // Group by category, preserving query order (category id, then name).
-  const byCategory = new Map<string, typeof channels>();
-  for (const ch of channels) {
-    const key = ch.category_name ?? 'Other';
-    if (!byCategory.has(key)) byCategory.set(key, []);
-    byCategory.get(key)!.push(ch);
-  }
+  const sourcesByCategory = groupByCategory(getSources());
+  const channelsByCategory = groupByCategory(getYoutubeChannels());
 
   return (
     <div className={`container ${styles.page}`}>
@@ -45,6 +51,37 @@ export default function AboutPage() {
           owners.
         </p>
 
+        <h2 id="sources">Sources we read</h2>
+        <p>
+          For written coverage we monitor a fixed, hand-picked list of publications across our
+          sections rather than trawling the open web. Each day we pull the latest stories from these
+          feeds, rank them by recency and relevance, and write up the ones most likely to matter to
+          you — always linking back to the original.
+        </p>
+      </div>
+
+      <div className={styles.channels}>
+        {sourcesByCategory.map(([category, list]) => (
+          <section key={category} className={styles.channelGroup} aria-label={`${category} sources`}>
+            <h3 className={styles.channelHeading}>{category}</h3>
+            <ul className={styles.channelList}>
+              {list.map((s) => (
+                <li key={s.id}>
+                  {s.site_url ? (
+                    <a href={s.site_url} target="_blank" rel="noopener noreferrer">
+                      {s.name}
+                    </a>
+                  ) : (
+                    s.name
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+
+      <div className={`prose ${styles.body}`}>
         <h2 id="channels">Channels we follow</h2>
         <p>
           For our video coverage we track a hand-picked set of YouTube channels across our sections.
@@ -54,7 +91,7 @@ export default function AboutPage() {
       </div>
 
       <div className={styles.channels}>
-        {[...byCategory.entries()].map(([category, list]) => (
+        {channelsByCategory.map(([category, list]) => (
           <section key={category} className={styles.channelGroup} aria-label={`${category} channels`}>
             <h3 className={styles.channelHeading}>{category}</h3>
             <ul className={styles.channelList}>

@@ -1,10 +1,12 @@
 import { currentMonth, getArticlesForMonth } from '@/lib/db';
 import { formatMonth } from '@/lib/format';
 import { FeedView } from '@/components/FeedView';
+import { PER_PAGE } from '@/lib/site';
 
 export default function HomePage() {
   const { year, month } = currentMonth();
-  const { items, total, page, totalPages } = getArticlesForMonth(year, month, 1);
+  // withLead: page 1 carries a featured lead on top of a full 12-card grid.
+  const { items, total, page, totalPages } = getArticlesForMonth(year, month, 1, PER_PAGE, true);
 
   return (
     <FeedView

@@ -71,12 +71,20 @@ export function getArticleBySlug(slug: string): Article | null {
   return row ?? null;
 }
 
-/** Articles published within a given calendar month, newest first, paginated. */
+/**
+ * Articles published within a given calendar month, newest first, paginated.
+ *
+ * `perPage` is the size of the article *grid*. When `withLead` is set, page 1
+ * additionally carries one featured lead on top of a full grid (so it holds
+ * `perPage + 1` articles and the grid still shows `perPage` cells); later pages
+ * are offset by that extra item. With `withLead` off the maths are unchanged.
+ */
 export function getArticlesForMonth(
   year: number,
   month: number,
   page = 1,
-  perPage = PER_PAGE
+  perPage = PER_PAGE,
+  withLead = false
 ): Paged<Article> {
   const { start, end } = monthBounds(year, month);
   const total = (
@@ -84,7 +92,11 @@ export function getArticlesForMonth(
       .prepare('SELECT COUNT(*) AS n FROM articles WHERE published_at >= ? AND published_at < ?')
       .get(start, end) as { n: number }
   ).n;
-  const offset = (page - 1) * perPage;
+
+  const firstPageCount = withLead ? perPage + 1 : perPage;
+  const limit = page === 1 ? firstPageCount : perPage;
+  const offset = page === 1 ? 0 : firstPageCount + (page - 2) * perPage;
+
   const items = db()
     .prepare(
       `SELECT ${ARTICLE_COLUMNS} ${FROM_ARTICLES}
@@ -92,8 +104,12 @@ export function getArticlesForMonth(
        ORDER BY a.featured DESC, a.published_at DESC
        LIMIT ? OFFSET ?`
     )
-    .all(start, end, perPage, offset) as Article[];
-  return paginate(items, total, page, perPage);
+    .all(start, end, limit, offset) as Article[];
+
+  const totalPages =
+    total <= firstPageCount ? 1 : 1 + Math.ceil((total - firstPageCount) / perPage);
+
+  return { items, total, page, perPage, totalPages };
 }
 
 /** Distinct months that contain at least one article, newest first. */
@@ -114,26 +130,40 @@ export function getArchiveMonths(): ArchiveMonth[] {
 export function getCategories(): Category[] {
   // Ordered by insertion (see scripts/seed.mjs CATEGORIES) so the nav reflects
   // the intended section order rather than alphabetical.
-  return db().prepare('SELECT id, slug, name, description FROM categories ORDER BY id ASC').all() as Category[];
+  return db().prepare('SELECT id, slug, name, description, keywords FROM categories ORDER BY id ASC').all() as Category[];
 }
 
 /** Active monitored YouTube channels, grouped by category (insertion order). */
 export function getYoutubeChannels(): import('./types').YoutubeChannel[] {
   return db()
     .prepare(
-      `SELECT ch.id, ch.name, ch.handle, ch.channel_id, ch.url, ch.category_id, ch.active,
+      `SELECT ch.id, ch.name, ch.handle, ch.channel_id, ch.url, ch.category_id, ch.weight, ch.active,
               c.slug AS category_slug, c.name AS category_name
        FROM youtube_channels ch
        LEFT JOIN categories c ON c.id = ch.category_id
        WHERE ch.active = 1
-       ORDER BY ch.category_id ASC, ch.name ASC`
+       ORDER BY ch.category_id ASC, ch.weight DESC, ch.name ASC`
     )
     .all() as import('./types').YoutubeChannel[];
 }
 
+/** Active monitored news sources, grouped by category then editorial weight. */
+export function getSources(): import('./types').Source[] {
+  return db()
+    .prepare(
+      `SELECT s.id, s.name, s.feed_url, s.site_url, s.category_id, s.weight, s.active,
+              c.slug AS category_slug, c.name AS category_name
+       FROM sources s
+       LEFT JOIN categories c ON c.id = s.category_id
+       WHERE s.active = 1
+       ORDER BY s.category_id ASC, s.weight DESC, s.name ASC`
+    )
+    .all() as import('./types').Source[];
+}
+
 export function getCategoryBySlug(slug: string): Category | null {
   return (
-    (db().prepare('SELECT id, slug, name, description FROM categories WHERE slug = ?').get(slug) as Category) ?? null
+    (db().prepare('SELECT id, slug, name, description, keywords FROM categories WHERE slug = ?').get(slug) as Category) ?? null
   );
 }
 

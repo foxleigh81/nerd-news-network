@@ -66,14 +66,22 @@ The database lives at `data/nnn.db`. The schema is created/owned by
 to INSERT/UPDATE rows** — it should never need to change the schema. Dates are
 **ISO 8601 UTC** strings, e.g. `2026-06-14T09:30:00Z`.
 
+> **Balance rule (site-wide).** Each daily run pulls the **same number of new
+> articles for every category** — one quota, `DAILY_PER_CATEGORY` (default 4),
+> applied equally to all six sections and shared across written sources and
+> YouTube. This keeps the whole site balanced over time. A category only falls
+> short when too few stories clear the validation gate that day; quotas are never
+> padded with filler. See the per-flow steps below.
+
 ### `categories`
 
-| Column        | Notes                                |
-| ------------- | ------------------------------------ |
-| `id`          | PK                                   |
-| `slug`        | URL slug, unique (e.g. `technology`) |
-| `name`        | Display name (e.g. `Technology`)     |
-| `description` | Optional section description         |
+| Column        | Notes                                                              |
+| ------------- | ------------------------------------------------------------------ |
+| `id`          | PK                                                                 |
+| `slug`        | URL slug, unique (e.g. `technology`)                               |
+| `name`        | Display name (e.g. `Technology`)                                   |
+| `description` | Optional section description                                       |
+| `keywords`    | Comma-separated topic vocabulary for this section — the daily task's topic-match signal (see the written-article flow) |
 
 ### `articles`
 
@@ -124,6 +132,80 @@ The renderer also allows headings (h2–h4), lists, blockquotes, tables, `code`/
 `pre`, and links (external links automatically open in a new tab with
 `rel="noopener noreferrer"`). Everything else is stripped.
 
+### `sources` (written-news feeds the daily task monitors)
+
+A curated, fixed registry of publications the daily task scrapes for written
+stories. **This is the only place the task looks** — it iterates these rows and
+never free-roams the open web, which is what keeps the daily run reproducible.
+Each row points at a machine-readable feed (RSS/Atom/JSON) so the parse shape is
+stable even if the publisher restyles their site. The seed ships ~4 per section;
+the list is surfaced on `/about` under "Sources we read".
+
+| Column        | Notes                                                            |
+| ------------- | --------------------------------------------------------------- |
+| `name`        | Publisher display name (used as the article's `source_name`)    |
+| `feed_url`    | RSS/Atom/JSON feed URL, unique — the task reads this            |
+| `site_url`    | Publisher homepage (nullable; shown on `/about`)               |
+| `category_id` | FK → `categories.id`                                            |
+| `weight`      | Editorial priority (higher = preferred in ranking ties)        |
+| `active`      | `1` = monitor, `0` = paused/skip                                |
+
+> **Feed-less sites.** A source without an RSS/Atom feed can still be monitored
+> via its `sitemap.xml`: the task filters the sitemap to article URLs (e.g. the
+> `/blog/` path) and uses each entry's `<lastmod>` for recency. Our own
+> **Foxy's Lab** blog is wired in this way (`feed_url` points at its sitemap)
+> and carries the top `weight` of 10 so it leads the Smart Homes section.
+
+#### The daily written-article flow (built for determinism)
+
+The goal is that two runs over the same inputs produce the same articles. The
+task's only genuinely generative step is writing the cliff-notes prose;
+everything else is fixed rules:
+
+1. **Fixed sources.** Read every `active` row in `sources` — that table only.
+   Fetch and parse each `feed_url` into entries (title, link, published date,
+   summary). Prefer feeds over HTML scraping so a layout change can't break you.
+2. **Canonicalise links.** For each entry derive a canonical URL: lowercase the
+   host, drop the fragment and tracking params (`utm_*`, `fbclid`, `gclid`, …).
+   This is the dedupe key for written stories (the video equivalent is
+   `video_youtube_id`).
+3. **Recency window.** Keep only entries published within the last _N_ days,
+   measured against the build reference date (`NNN_BUILD_DATE`), **not**
+   wall-clock-at-run — so a re-run on the same build date sees the same window.
+4. **Dedupe (idempotency).** Drop any whose canonical URL already exists in
+   `articles.source_url`. A `UNIQUE` index on `source_url` enforces this at the
+   database level, so a re-run can never double-insert; reruns converge.
+5. **Deterministic score.** Rank survivors by an explicit score:
+   `score = recencyPoints + source.weight + topicMatch`, where `recencyPoints`
+   decays with age, `source.weight` comes from the registry (so Foxy's Lab, at
+   weight 10, outranks everything in its section), and `topicMatch` counts how
+   many of the candidate's category's `categories.keywords` appear in its
+   headline/summary. The keyword vocabulary is read straight from the database —
+   no "is this interesting?" judgement calls.
+6. **Stable ordering.** Sort by `score` descending, breaking ties by
+   `published_at` descending, then canonical URL ascending — so equal scores
+   always resolve the same way.
+7. **Equal per-category quota + source cap.** Pull the **same number of new
+   articles for every category each day** — a single quota `DAILY_PER_CATEGORY`
+   (default **4**) applied identically to all six sections, so the site stays
+   balanced over time rather than skewing toward whichever topics happen to
+   publish most. Within a category, cap each source at **up to 2 articles per
+   day** so one feed can't fill the quota alone. If a category can't reach the
+   quota on a given day (too few stories clear the gate), take what qualifies —
+   equal **as much as possible**, never padded with filler. This per-category
+   budget is shared with the video flow below (written + video together count
+   toward the category's daily quota).
+8. **Hard validation gate — reject, don't patch.** Before writing, a candidate
+   must have **both** a `source_url` (the deep link) and a usable hero image.
+   Resolve the image from the task or the article's Open Graph / Twitter card
+   (`scripts/fetch-images.mjs` does the latter). **If no real image resolves,
+   reject the candidate and promote the next-highest-scoring story** — never
+   publish with a placeholder. Likewise reject anything missing `source_url`.
+9. **Write.** For each survivor, write a cliff-notes `body` (the one generative
+   step), set `headline`, `blurb`, `category_id`, `author`, `source_name` (the
+   publisher), `source_url` (the canonical link), `published_at` (the source's
+   real publish time) and the hero fields, then insert.
+
 ### `youtube_channels` (video sources the daily task monitors)
 
 A curated list of YouTube channels per category. The seed ships four per
@@ -137,6 +219,7 @@ surfaced on the `/about` page under "Channels we follow".
 | `channel_id`  | `UC…` id for the RSS/API feed (nullable; resolvable from handle)|
 | `url`         | Channel URL (unique)                                            |
 | `category_id` | FK → `categories.id`                                            |
+| `weight`      | Editorial priority (higher = preferred). **Foxy's Lab = 10** (top of Smart Homes); others default to 3 |
 | `active`      | `1` = monitor, `0` = paused/skip                                |
 
 **The daily video-to-article flow** the task should implement:
@@ -155,6 +238,16 @@ surfaced on the `/about` page under "Channels we follow".
 4. For a new video, fetch the transcript and write a cliff-notes `body` from it
    (same format as above), set `video_youtube_id`, `source_name` (the channel),
    `source_url` (the watch URL) and `category_id`, and insert the article.
+
+Process channels in `weight` order (highest first) so that when a section has
+more new videos than its quota, the top channels win — **Foxy's Lab (weight 10)
+always leads Smart Homes**.
+
+Videos count toward the **same per-category daily quota** as written articles
+(`DAILY_PER_CATEGORY`, default 4 — see the written-article flow). The task fills
+each category to the same target from its written sources and video channels
+combined, so every section gets an equal number of new items per day regardless
+of medium.
 
 When `video_youtube_id` is set the article page embeds the player at the top in
 place of the hero image, the card shows a play badge, and the byline/credit read
@@ -221,16 +314,24 @@ See `.env.example`. All are optional for local development.
 
 | Variable                       | Purpose                                            |
 | ------------------------------ | -------------------------------------------------- |
-| `NEXT_PUBLIC_SITE_URL`         | Absolute URL for canonical links, sitemap, RSS, OG |
-| `NEXT_PUBLIC_ADSENSE_CLIENT`   | AdSense publisher id — activates live ad units     |
-| `NEXT_PUBLIC_AD_SLOT_LEADER`   | Leaderboard ad-unit slot id                        |
-| `NEXT_PUBLIC_AD_SLOT_INFEED`   | In-feed ad-unit slot id                            |
-| `NEXT_PUBLIC_AD_SLOT_SIDEBAR`  | Sidebar (article) ad-unit slot id                  |
-| `NNN_BUILD_DATE`               | Pin the build's reference date (ISO 8601 UTC)      |
+| `NEXT_PUBLIC_SITE_URL`              | Absolute URL for canonical links, sitemap, RSS, OG |
+| `NEXT_PUBLIC_ADS_ENABLED`           | **Master switch** — set to `true` to render any ad space at all |
+| `NEXT_PUBLIC_ADSENSE_CLIENT`        | AdSense publisher id — activates live ad units     |
+| `NEXT_PUBLIC_AD_SLOT_LEADER`        | Feed leaderboard (top) ad-unit slot id             |
+| `NEXT_PUBLIC_AD_SLOT_INFEED`        | In-grid ad-unit slot id (replaces one feed card)   |
+| `NEXT_PUBLIC_AD_SLOT_ARTICLE_TOP`   | Article — above the body                            |
+| `NEXT_PUBLIC_AD_SLOT_ARTICLE_BOTTOM`| Article — below the body                            |
+| `NEXT_PUBLIC_AD_SLOT_SIDEBAR`       | Article sidebar (top) ad-unit slot id              |
+| `NEXT_PUBLIC_AD_SLOT_SIDEBAR_BOTTOM`| Article sidebar (bottom) ad-unit slot id           |
+| `NNN_BUILD_DATE`                    | Pin the build's reference date (ISO 8601 UTC)      |
 
-Until an AdSense client id is set, ad placements render as clearly-labelled
-placeholders that reserve the correct space (so enabling ads causes no layout
-shift).
+Advertising is **off by default**. Set `NEXT_PUBLIC_ADS_ENABLED=true` to render
+ad placements; without an AdSense client id they appear as clearly-labelled
+placeholders that reserve the correct space (so enabling live ads causes no
+layout shift). The placements are: a feed leaderboard, an in-grid unit that
+replaces one card in the feed, top/bottom units on the article body, and
+top/bottom units in the article sidebar. With ads off, nothing renders and the
+feed shows a full set of articles.
 
 ## Logo assets
 

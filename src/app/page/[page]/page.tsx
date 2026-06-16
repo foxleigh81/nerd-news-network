@@ -11,7 +11,7 @@ interface Params {
 
 export function generateStaticParams() {
   const { year, month } = currentMonth();
-  const { totalPages } = getArticlesForMonth(year, month, 1);
+  const { totalPages } = getArticlesForMonth(year, month, 1, PER_PAGE, true);
   // Page 1 is served at "/", so generate 2..N here.
   const pages: { page: string }[] = [];
   for (let p = 2; p <= totalPages; p++) pages.push({ page: String(p) });
@@ -32,7 +32,7 @@ export default async function FrontPagePaginated({ params }: Params) {
   if (!Number.isInteger(page) || page < 2) notFound();
 
   const { year, month } = currentMonth();
-  const { items, total, totalPages } = getArticlesForMonth(year, month, page, PER_PAGE);
+  const { items, total, totalPages } = getArticlesForMonth(year, month, page, PER_PAGE, true);
   if (page > totalPages) notFound();
 
   return (

@@ -5,6 +5,7 @@ export interface Category {
   slug: string;
   name: string;
   description: string | null;
+  keywords: string | null; // comma-separated topic terms (drives the daily task's topic match)
 }
 
 export interface Article {
@@ -38,6 +39,20 @@ export interface YoutubeChannel {
   channel_id: string | null;
   url: string;
   category_id: number | null;
+  weight: number;
+  active: number;
+  // Joined:
+  category_slug: string | null;
+  category_name: string | null;
+}
+
+export interface Source {
+  id: number;
+  name: string;
+  feed_url: string;
+  site_url: string | null;
+  category_id: number | null;
+  weight: number;
   active: number;
   // Joined:
   category_slug: string | null;
