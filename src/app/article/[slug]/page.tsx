@@ -8,7 +8,7 @@ import {
 } from '@/lib/db';
 import { renderMarkdown } from '@/lib/markdown';
 import { formatDate, isoDate, readingMinutes } from '@/lib/format';
-import { SITE } from '@/lib/site';
+import { SITE, AD_SLOTS } from '@/lib/site';
 import { SmartImage } from '@/components/SmartImage';
 import { ShareBar } from '@/components/ShareBar';
 import { RelatedArticles } from '@/components/RelatedArticles';
@@ -149,6 +149,9 @@ export default async function ArticlePage({ params }: Params) {
         </figure>
       ) : null}
 
+      {/* Top ad — full width, between the hero and the article body */}
+      <AdSlot format="leaderboard" slot={AD_SLOTS.articleTop} className={styles.adArticleTop} />
+
       {/* 60 / 40 two-column layout */}
       <div className={styles.grid}>
         <div className={styles.main}>
@@ -209,16 +212,16 @@ export default async function ArticlePage({ params }: Params) {
           </div>
         </div>
 
-        {/* Right column — related + ad */}
+        {/* Right column — ad, related, ad */}
         <aside className={styles.side} aria-label="Related content">
-          <AdSlot
-            format="rectangle"
-            slot={process.env.NEXT_PUBLIC_AD_SLOT_SIDEBAR}
-            className={styles.sideAd}
-          />
+          <AdSlot format="rectangle" slot={AD_SLOTS.sidebarTop} className={styles.sideAd} />
           <RelatedArticles articles={related} />
+          <AdSlot format="rectangle" slot={AD_SLOTS.sidebarBottom} className={styles.sideAd} />
         </aside>
       </div>
+
+      {/* Bottom ad — full width, after the article */}
+      <AdSlot format="leaderboard" slot={AD_SLOTS.articleBottom} className={styles.adArticleBottom} />
     </article>
   );
 }

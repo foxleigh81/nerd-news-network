@@ -1,6 +1,7 @@
 .related {
-  position: sticky;
-  top: calc(1rem + 56px); /* clear the sticky nav */
+  /* Scrolls with the article column. Not sticky: within the short sidebar the
+     pinned block would offset over the bottom ad and cover it. */
+  position: static;
 }
 
 .list {

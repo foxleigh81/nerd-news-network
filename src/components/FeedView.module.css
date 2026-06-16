@@ -22,9 +22,6 @@
 .adTop {
   margin-bottom: clamp(1.75rem, 1.25rem + 2vw, 2.75rem);
 }
-.adFeed {
-  margin-block: clamp(2rem, 1.5rem + 2vw, 3rem);
-}
 
 .leadWrap {
   padding-bottom: clamp(1.75rem, 1.25rem + 2vw, 2.75rem);

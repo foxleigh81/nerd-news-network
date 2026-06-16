@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import { display, serif, mono } from './fonts';
-import { SITE } from '@/lib/site';
+import { SITE, ADS_ENABLED } from '@/lib/site';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import './globals.css';
@@ -66,7 +66,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </main>
         <Footer />
 
-        {ADSENSE_CLIENT ? (
+        {ADS_ENABLED && ADSENSE_CLIENT ? (
           <Script
             id="adsbygoogle-init"
             async

@@ -11,6 +11,13 @@
   width: 100%;
 }
 
+/* Ad cell occupies a normal grid slot; top-align so it lines up with the
+   article cards in its row, label sitting beneath the unit. */
+.adCell {
+  align-items: flex-start;
+  justify-content: center;
+}
+
 /* Column dividers feel like a print page; show on wider screens. */
 @media (min-width: 1000px) {
   .grid {
