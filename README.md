@@ -34,8 +34,14 @@ cheap, secure hosting anywhere.
 
 ```bash
 npm install
-npm run dev        # seeds a sample DB if empty, then starts the dev server
+npm run dev        # seeds the local mock DB if empty, then starts the dev server
 ```
+
+Local development uses a **separate, git-ignored mock database** (`data/nnn.dev.db`)
+seeded with the sample content in `scripts/seed.mjs`, so dev never reads or
+mutates the committed production database (`data/nnn.db`, which the daily task
+owns). Production builds (`next build`) read `data/nnn.db`. Override either with
+the `NNN_DB_PATH` env var.
 
 Build the static site:
 
@@ -51,10 +57,10 @@ Pages, GitHub Pages, S3/CloudFront, or any static host.
 
 | Script               | Description                                                    |
 | -------------------- | ------------------------------------------------------------- |
-| `npm run dev`        | Seed-if-empty, then `next dev`                                |
-| `npm run build`      | Build logo assets, ensure schema, `next build` (static export)|
-| `npm run seed`       | Ensure schema; seed sample data only if the DB is empty       |
-| `npm run seed:reset` | Wipe content and re-insert the sample data set                |
+| `npm run dev`        | Seed the mock DB (`nnn.dev.db`) if empty, then `next dev`     |
+| `npm run build`      | Build logo assets, ensure prod DB schema, `next build` (export)|
+| `npm run seed`       | Seed the **mock** DB (`nnn.dev.db`) only if it is empty       |
+| `npm run seed:reset` | Wipe and re-seed the **mock** DB with the sample data set     |
 | `npm run images`     | Download real lead images from each source (placeholders only)|
 | `npm run images:force` | Re-download lead images for every article                   |
 | `npm run logo`       | Regenerate web logo/icon/OG assets from the master PNG        |

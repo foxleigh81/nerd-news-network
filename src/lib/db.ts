@@ -7,7 +7,12 @@ import type { Article, ArchiveMonth, Category, Paged } from './types';
 // ---------------------------------------------------------------------------
 // Connection (read-only, opened once and reused across the build).
 // ---------------------------------------------------------------------------
-const DB_PATH = join(process.cwd(), 'data', 'nnn.db');
+// Local dev (`next dev`) reads a git-ignored nnn.dev.db full of sample/mock data
+// so it never depends on or mutates the committed production DB (nnn.db, owned by
+// the daily task). Production builds read nnn.db. NNN_DB_PATH overrides both.
+const DB_PATH =
+  process.env.NNN_DB_PATH ||
+  join(process.cwd(), 'data', process.env.NODE_ENV === 'development' ? 'nnn.dev.db' : 'nnn.db');
 
 let _db: Database.Database | null = null;
 function db(): Database.Database {

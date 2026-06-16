@@ -24,7 +24,14 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, '..', 'data');
-const DB_PATH = join(DATA_DIR, 'nnn.db');
+
+// Which database to write. Production/daily content lives in nnn.db (committed,
+// owned by the daily task). Local development uses a separate, git-ignored
+// nnn.dev.db seeded with sample/mock data, so dev never touches the real DB.
+// `--dev` (or NNN_DB_PATH) selects the dev file; db.ts reads the same path.
+const DEV_DB = process.argv.includes('--dev');
+const DB_PATH =
+  process.env.NNN_DB_PATH || join(DATA_DIR, DEV_DB ? 'nnn.dev.db' : 'nnn.db');
 
 mkdirSync(DATA_DIR, { recursive: true });
 

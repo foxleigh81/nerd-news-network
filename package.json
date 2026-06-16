@@ -4,14 +4,14 @@
   "private": true,
   "description": "Nerd News Network — a statically generated news aggregation site.",
   "scripts": {
-    "predev": "node scripts/seed.mjs",
+    "predev": "node scripts/seed.mjs --dev",
     "dev": "next dev",
     "prebuild": "node scripts/build-logo.mjs && node scripts/seed.mjs && node scripts/fetch-images.mjs",
     "build": "next build",
     "start": "npx serve out",
     "lint": "next lint",
-    "seed": "node scripts/seed.mjs",
-    "seed:reset": "node scripts/seed.mjs --reset",
+    "seed": "node scripts/seed.mjs --dev",
+    "seed:reset": "node scripts/seed.mjs --dev --reset",
     "logo": "node scripts/build-logo.mjs",
     "images": "node scripts/fetch-images.mjs",
     "images:force": "node scripts/fetch-images.mjs --force"
