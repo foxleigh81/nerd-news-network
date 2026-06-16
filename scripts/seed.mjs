@@ -18,7 +18,7 @@
 // (see scripts/fetch-images.mjs); bodies may also embed images/video.
 
 import Database from 'better-sqlite3';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -140,48 +140,20 @@ if (!channelCols.includes('weight')) {
 }
 
 // ---------------------------------------------------------------------------
-// Curated YouTube channels (4 per category) the daily task monitors.
-// channel_id is the UC… id used by YouTube's per-channel RSS feed
-// (https://www.youtube.com/feeds/videos.xml?channel_id=…); where left null the
-// daily task can resolve it from the handle/url.
+// Curated data sources — the YouTube channels and written-news feeds the daily
+// task monitors. They live in data/sources.json so a human can edit them by
+// hand without touching this script; re-run the seed (or rebuild) to apply.
+//   youtubeChannels[]: { category, name, handle, channel_id, url, weight }
+//   newsSources[]:     { category, name, feed_url, site_url, weight }
+// `category` is a category slug (see CATEGORIES below); `weight` breaks ranking
+// ties (higher = preferred), e.g. Foxy's Lab is 10 so it leads Smart Homes.
+// channel_id is the UC… id for the per-channel RSS feed; null is resolvable
+// from the handle/url. A feed-less site can point feed_url at its sitemap.xml.
 // ---------------------------------------------------------------------------
-const CHANNELS = [
-  // AI
-  { name: 'Two Minute Papers', handle: '@TwoMinutePapers', channel_id: 'UCbfYPyITQ-7l4upoX8nvctg', url: 'https://www.youtube.com/@TwoMinutePapers', category: 'ai' },
-  { name: 'Yannic Kilcher', handle: '@YannicKilcher', channel_id: 'UCZHmQk67mSJgfCCTn7xBfew', url: 'https://www.youtube.com/@YannicKilcher', category: 'ai' },
-  { name: 'AI Explained', handle: '@aiexplained-official', channel_id: 'UCNJ1Ymd5yFuUPtn21xtRbbw', url: 'https://www.youtube.com/@aiexplained-official', category: 'ai' },
-  { name: 'Matt Wolfe', handle: '@mreflow', channel_id: null, url: 'https://www.youtube.com/@mreflow', category: 'ai' },
-
-  // Networking
-  { name: 'NetworkChuck', handle: '@NetworkChuck', channel_id: 'UC9x0AN7BWHpCDHSm9NiJFJQ', url: 'https://www.youtube.com/@NetworkChuck', category: 'networking' },
-  { name: 'Crosstalk Solutions', handle: '@CrosstalkSolutions', channel_id: 'UCVS6ejD9NLZvjsvhcbiDzjw', url: 'https://www.youtube.com/@CrosstalkSolutions', category: 'networking' },
-  { name: 'Lawrence Systems', handle: '@LawrenceSystems', channel_id: 'UCHkYOD-3fZbuGhwsADBd9ZQ', url: 'https://www.youtube.com/@LawrenceSystems', category: 'networking' },
-  { name: 'David Bombal', handle: '@davidbombal', channel_id: 'UCP7WmQ_U4GB3K51Od9QvM0w', url: 'https://www.youtube.com/@davidbombal', category: 'networking' },
-
-  // Smart Homes (Foxy's Lab and Paul Hibbert requested)
-  { name: "Foxy's Lab", handle: null, channel_id: 'UC_blM3yCdvOSzxakaj3178w', url: 'https://www.youtube.com/channel/UC_blM3yCdvOSzxakaj3178w', category: 'smart-homes', weight: 10 },
-  { name: 'Paul Hibbert', handle: '@paulhibbert', channel_id: 'UCYLnawaM-36HncBBUeWrlGA', url: 'https://www.youtube.com/@paulhibbert', category: 'smart-homes' },
-  { name: 'Smart Home Solver', handle: '@SmartHomeSolver', channel_id: null, url: 'https://www.youtube.com/@SmartHomeSolver', category: 'smart-homes' },
-  { name: 'Everything Smart Home', handle: '@EverythingSmartHome', channel_id: null, url: 'https://www.youtube.com/@EverythingSmartHome', category: 'smart-homes' },
-
-  // Gaming
-  { name: 'IGN', handle: '@IGN', channel_id: null, url: 'https://www.youtube.com/@IGN', category: 'gaming' },
-  { name: 'GameSpot', handle: '@gamespot', channel_id: 'UCbu2SsF-Or3Rsn3NxqODImw', url: 'https://www.youtube.com/@gamespot', category: 'gaming' },
-  { name: 'Digital Foundry', handle: '@DigitalFoundry', channel_id: 'UC9PBzalIcEQCsiIkq36PyUA', url: 'https://www.youtube.com/@DigitalFoundry', category: 'gaming' },
-  { name: 'GamesRadar', handle: '@gamesradar', channel_id: null, url: 'https://www.youtube.com/@gamesradar', category: 'gaming' },
-
-  // Science
-  { name: 'Veritasium', handle: '@veritasium', channel_id: 'UCHnyfMqiRRG1u-2MsSQLbXA', url: 'https://www.youtube.com/@veritasium', category: 'science' },
-  { name: 'Kurzgesagt – In a Nutshell', handle: '@kurzgesagt', channel_id: 'UCsXVk37bltHxD1rDPwtNM8Q', url: 'https://www.youtube.com/@kurzgesagt', category: 'science' },
-  { name: 'PBS Space Time', handle: '@pbsspacetime', channel_id: 'UC7_gcs09iThXybpVgjHZ_7g', url: 'https://www.youtube.com/@pbsspacetime', category: 'science' },
-  { name: 'Anton Petrov', handle: '@whatdamath', channel_id: 'UCciQ8wFcVoIIMi-lfu8-cjQ', url: 'https://www.youtube.com/@whatdamath', category: 'science' },
-
-  // Technology
-  { name: 'Marques Brownlee (MKBHD)', handle: '@mkbhd', channel_id: 'UCBJycsmduvYEL83R_U4JriQ', url: 'https://www.youtube.com/@mkbhd', category: 'technology' },
-  { name: 'Linus Tech Tips', handle: '@LinusTechTips', channel_id: 'UCXuqSBlHAE6Xw-yeJA0Tunw', url: 'https://www.youtube.com/@LinusTechTips', category: 'technology' },
-  { name: 'Dave2D', handle: '@Dave2D', channel_id: null, url: 'https://www.youtube.com/@Dave2D', category: 'technology' },
-  { name: 'TechLinked', handle: '@TechLinked', channel_id: 'UCeeFfhMcJa1kjtfZAGskOCA', url: 'https://www.youtube.com/@TechLinked', category: 'technology' },
-];
+const SOURCES_FILE = join(DATA_DIR, 'sources.json');
+const { youtubeChannels: CHANNELS, newsSources: SOURCES } = JSON.parse(
+  readFileSync(SOURCES_FILE, 'utf8')
+);
 
 const insertChannel = db.prepare(
   `INSERT OR IGNORE INTO youtube_channels (name, handle, channel_id, url, category_id, weight, active)
@@ -203,53 +175,8 @@ function seedChannels(resolveCategoryId) {
   tx();
 }
 
-// ---------------------------------------------------------------------------
-// Curated written-news sources (≈4 per category) the daily task monitors.
-// These are the ONLY places the task scrapes for written stories — it ranks the
-// feed entries deterministically and never free-roams the web. `weight` is the
-// editorial priority used to break ranking ties (higher = preferred). Feed URLs
-// are a sensible starter set; the daily task should verify each still resolves.
-// ---------------------------------------------------------------------------
-const SOURCES = [
-  // AI
-  { name: 'MIT Technology Review — AI', feed_url: 'https://www.technologyreview.com/topic/artificial-intelligence/feed', site_url: 'https://www.technologyreview.com/', category: 'ai', weight: 5 },
-  { name: 'VentureBeat — AI', feed_url: 'https://venturebeat.com/category/ai/feed/', site_url: 'https://venturebeat.com/category/ai/', category: 'ai', weight: 3 },
-  { name: 'The Verge — AI', feed_url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml', site_url: 'https://www.theverge.com/ai-artificial-intelligence', category: 'ai', weight: 4 },
-  { name: 'Ars Technica — AI', feed_url: 'https://arstechnica.com/ai/feed/', site_url: 'https://arstechnica.com/ai/', category: 'ai', weight: 4 },
-
-  // Networking
-  { name: 'The Register — Networks', feed_url: 'https://www.theregister.com/networks/headlines.atom', site_url: 'https://www.theregister.com/networks/', category: 'networking', weight: 4 },
-  { name: 'Cloudflare Blog', feed_url: 'https://blog.cloudflare.com/rss/', site_url: 'https://blog.cloudflare.com/', category: 'networking', weight: 4 },
-  { name: 'APNIC Blog', feed_url: 'https://blog.apnic.net/feed/', site_url: 'https://blog.apnic.net/', category: 'networking', weight: 3 },
-  { name: 'Network World', feed_url: 'https://www.networkworld.com/feed/', site_url: 'https://www.networkworld.com/', category: 'networking', weight: 3 },
-
-  // Smart Homes (Foxy's Lab is our own blog — top priority; it has no RSS feed,
-  // so the daily task reads sitemap.xml and filters to /blog/ URLs by lastmod.)
-  { name: "Foxy's Lab", feed_url: 'https://www.foxyslab.com/sitemap.xml', site_url: 'https://www.foxyslab.com/blog', category: 'smart-homes', weight: 10 },
-  { name: 'The Verge — Smart Home', feed_url: 'https://www.theverge.com/rss/smart-home/index.xml', site_url: 'https://www.theverge.com/smart-home', category: 'smart-homes', weight: 4 },
-  { name: 'Stacey on IoT', feed_url: 'https://staceyoniot.com/feed/', site_url: 'https://staceyoniot.com/', category: 'smart-homes', weight: 4 },
-  { name: 'Home Assistant Blog', feed_url: 'https://www.home-assistant.io/atom.xml', site_url: 'https://www.home-assistant.io/blog/', category: 'smart-homes', weight: 3 },
-  { name: 'HomeKit News', feed_url: 'https://homekitnews.com/feed/', site_url: 'https://homekitnews.com/', category: 'smart-homes', weight: 2 },
-
-  // Gaming
-  { name: 'Eurogamer', feed_url: 'https://www.eurogamer.net/feed', site_url: 'https://www.eurogamer.net/', category: 'gaming', weight: 4 },
-  { name: 'Polygon', feed_url: 'https://www.polygon.com/rss/index.xml', site_url: 'https://www.polygon.com/', category: 'gaming', weight: 4 },
-  { name: 'PC Gamer', feed_url: 'https://www.pcgamer.com/rss/', site_url: 'https://www.pcgamer.com/', category: 'gaming', weight: 3 },
-  { name: 'Rock Paper Shotgun', feed_url: 'https://www.rockpapershotgun.com/feed', site_url: 'https://www.rockpapershotgun.com/', category: 'gaming', weight: 3 },
-
-  // Science
-  { name: 'Quanta Magazine', feed_url: 'https://www.quantamagazine.org/feed/', site_url: 'https://www.quantamagazine.org/', category: 'science', weight: 5 },
-  { name: 'ScienceDaily — Top Science', feed_url: 'https://www.sciencedaily.com/rss/top/science.xml', site_url: 'https://www.sciencedaily.com/', category: 'science', weight: 3 },
-  { name: 'Space.com', feed_url: 'https://www.space.com/feeds/all', site_url: 'https://www.space.com/', category: 'science', weight: 4 },
-  { name: 'Phys.org', feed_url: 'https://phys.org/rss-feed/', site_url: 'https://phys.org/', category: 'science', weight: 3 },
-
-  // Technology
-  { name: 'Ars Technica', feed_url: 'https://feeds.arstechnica.com/arstechnica/index', site_url: 'https://arstechnica.com/', category: 'technology', weight: 5 },
-  { name: 'The Verge', feed_url: 'https://www.theverge.com/rss/index.xml', site_url: 'https://www.theverge.com/', category: 'technology', weight: 4 },
-  { name: 'TechCrunch', feed_url: 'https://techcrunch.com/feed/', site_url: 'https://techcrunch.com/', category: 'technology', weight: 3 },
-  { name: 'Engadget', feed_url: 'https://www.engadget.com/rss.xml', site_url: 'https://www.engadget.com/', category: 'technology', weight: 3 },
-];
-
+// Written-news sources (SOURCES) are loaded from data/sources.json alongside
+// the YouTube channels — see the load near the top of this file.
 const insertSource = db.prepare(
   `INSERT OR IGNORE INTO sources (name, feed_url, site_url, category_id, weight, active)
    VALUES (@name, @feed_url, @site_url, @category_id, @weight, 1)`

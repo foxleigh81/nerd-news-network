@@ -141,6 +141,12 @@ Each row points at a machine-readable feed (RSS/Atom/JSON) so the parse shape is
 stable even if the publisher restyles their site. The seed ships ~4 per section;
 the list is surfaced on `/about` under "Sources we read".
 
+> **Editing the lists.** The curated sources and YouTube channels live in a
+> plain, human-editable file at [`data/sources.json`](data/sources.json)
+> (`newsSources[]` and `youtubeChannels[]`). Add, remove or re-weight entries
+> there, then run `npm run seed:reset` (or just rebuild) to apply — no need to
+> touch `scripts/seed.mjs`.
+
 | Column        | Notes                                                            |
 | ------------- | --------------------------------------------------------------- |
 | `name`        | Publisher display name (used as the article's `source_name`)    |

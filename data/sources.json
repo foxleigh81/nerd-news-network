@@ -1,0 +1,68 @@
+{
+  "_comment": "Human-editable list of the sources the daily task monitors. Edit freely, then run `npm run seed:reset` (or just rebuild) to apply. 'category' is a category slug (ai, networking, smart-homes, gaming, science, technology). 'weight' breaks ranking ties (higher = preferred; Foxy's Lab is 10 so it leads Smart Homes). For channels, 'channel_id' (the UC… id) or 'handle' may be null. For sources, a site without an RSS feed can point 'feed_url' at its sitemap.xml.",
+
+  "youtubeChannels": [
+    { "category": "ai", "name": "Two Minute Papers", "handle": "@TwoMinutePapers", "channel_id": "UCbfYPyITQ-7l4upoX8nvctg", "url": "https://www.youtube.com/@TwoMinutePapers", "weight": 3 },
+    { "category": "ai", "name": "Yannic Kilcher", "handle": "@YannicKilcher", "channel_id": "UCZHmQk67mSJgfCCTn7xBfew", "url": "https://www.youtube.com/@YannicKilcher", "weight": 3 },
+    { "category": "ai", "name": "AI Explained", "handle": "@aiexplained-official", "channel_id": "UCNJ1Ymd5yFuUPtn21xtRbbw", "url": "https://www.youtube.com/@aiexplained-official", "weight": 3 },
+    { "category": "ai", "name": "Matt Wolfe", "handle": "@mreflow", "channel_id": null, "url": "https://www.youtube.com/@mreflow", "weight": 3 },
+
+    { "category": "networking", "name": "NetworkChuck", "handle": "@NetworkChuck", "channel_id": "UC9x0AN7BWHpCDHSm9NiJFJQ", "url": "https://www.youtube.com/@NetworkChuck", "weight": 3 },
+    { "category": "networking", "name": "Crosstalk Solutions", "handle": "@CrosstalkSolutions", "channel_id": "UCVS6ejD9NLZvjsvhcbiDzjw", "url": "https://www.youtube.com/@CrosstalkSolutions", "weight": 3 },
+    { "category": "networking", "name": "Lawrence Systems", "handle": "@LawrenceSystems", "channel_id": "UCHkYOD-3fZbuGhwsADBd9ZQ", "url": "https://www.youtube.com/@LawrenceSystems", "weight": 3 },
+    { "category": "networking", "name": "David Bombal", "handle": "@davidbombal", "channel_id": "UCP7WmQ_U4GB3K51Od9QvM0w", "url": "https://www.youtube.com/@davidbombal", "weight": 3 },
+
+    { "category": "smart-homes", "name": "Foxy's Lab", "handle": null, "channel_id": "UC_blM3yCdvOSzxakaj3178w", "url": "https://www.youtube.com/channel/UC_blM3yCdvOSzxakaj3178w", "weight": 10 },
+    { "category": "smart-homes", "name": "Paul Hibbert", "handle": "@paulhibbert", "channel_id": "UCYLnawaM-36HncBBUeWrlGA", "url": "https://www.youtube.com/@paulhibbert", "weight": 6 },
+    { "category": "smart-homes", "name": "Smart Home Solver", "handle": "@SmartHomeSolver", "channel_id": null, "url": "https://www.youtube.com/@SmartHomeSolver", "weight": 3 },
+    { "category": "smart-homes", "name": "Everything Smart Home", "handle": "@EverythingSmartHome", "channel_id": null, "url": "https://www.youtube.com/@EverythingSmartHome", "weight": 3 },
+
+    { "category": "gaming", "name": "IGN", "handle": "@IGN", "channel_id": null, "url": "https://www.youtube.com/@IGN", "weight": 3 },
+    { "category": "gaming", "name": "GameSpot", "handle": "@gamespot", "channel_id": "UCbu2SsF-Or3Rsn3NxqODImw", "url": "https://www.youtube.com/@gamespot", "weight": 3 },
+    { "category": "gaming", "name": "Digital Foundry", "handle": "@DigitalFoundry", "channel_id": "UC9PBzalIcEQCsiIkq36PyUA", "url": "https://www.youtube.com/@DigitalFoundry", "weight": 3 },
+    { "category": "gaming", "name": "GamesRadar", "handle": "@gamesradar", "channel_id": null, "url": "https://www.youtube.com/@gamesradar", "weight": 3 },
+
+    { "category": "science", "name": "Veritasium", "handle": "@veritasium", "channel_id": "UCHnyfMqiRRG1u-2MsSQLbXA", "url": "https://www.youtube.com/@veritasium", "weight": 3 },
+    { "category": "science", "name": "Kurzgesagt – In a Nutshell", "handle": "@kurzgesagt", "channel_id": "UCsXVk37bltHxD1rDPwtNM8Q", "url": "https://www.youtube.com/@kurzgesagt", "weight": 3 },
+    { "category": "science", "name": "PBS Space Time", "handle": "@pbsspacetime", "channel_id": "UC7_gcs09iThXybpVgjHZ_7g", "url": "https://www.youtube.com/@pbsspacetime", "weight": 3 },
+    { "category": "science", "name": "Anton Petrov", "handle": "@whatdamath", "channel_id": "UCciQ8wFcVoIIMi-lfu8-cjQ", "url": "https://www.youtube.com/@whatdamath", "weight": 3 },
+
+    { "category": "technology", "name": "Marques Brownlee (MKBHD)", "handle": "@mkbhd", "channel_id": "UCBJycsmduvYEL83R_U4JriQ", "url": "https://www.youtube.com/@mkbhd", "weight": 3 },
+    { "category": "technology", "name": "Linus Tech Tips", "handle": "@LinusTechTips", "channel_id": "UCXuqSBlHAE6Xw-yeJA0Tunw", "url": "https://www.youtube.com/@LinusTechTips", "weight": 3 },
+    { "category": "technology", "name": "Dave2D", "handle": "@Dave2D", "channel_id": null, "url": "https://www.youtube.com/@Dave2D", "weight": 3 },
+    { "category": "technology", "name": "TechLinked", "handle": "@TechLinked", "channel_id": "UCeeFfhMcJa1kjtfZAGskOCA", "url": "https://www.youtube.com/@TechLinked", "weight": 3 }
+  ],
+
+  "newsSources": [
+    { "category": "ai", "name": "MIT Technology Review — AI", "feed_url": "https://www.technologyreview.com/topic/artificial-intelligence/feed", "site_url": "https://www.technologyreview.com/", "weight": 5 },
+    { "category": "ai", "name": "VentureBeat — AI", "feed_url": "https://venturebeat.com/category/ai/feed/", "site_url": "https://venturebeat.com/category/ai/", "weight": 3 },
+    { "category": "ai", "name": "The Verge — AI", "feed_url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", "site_url": "https://www.theverge.com/ai-artificial-intelligence", "weight": 4 },
+    { "category": "ai", "name": "Ars Technica — AI", "feed_url": "https://arstechnica.com/ai/feed/", "site_url": "https://arstechnica.com/ai/", "weight": 4 },
+
+    { "category": "networking", "name": "The Register — Networks", "feed_url": "https://www.theregister.com/networks/headlines.atom", "site_url": "https://www.theregister.com/networks/", "weight": 4 },
+    { "category": "networking", "name": "Cloudflare Blog", "feed_url": "https://blog.cloudflare.com/rss/", "site_url": "https://blog.cloudflare.com/", "weight": 4 },
+    { "category": "networking", "name": "APNIC Blog", "feed_url": "https://blog.apnic.net/feed/", "site_url": "https://blog.apnic.net/", "weight": 3 },
+    { "category": "networking", "name": "Network World", "feed_url": "https://www.networkworld.com/feed/", "site_url": "https://www.networkworld.com/", "weight": 3 },
+
+    { "category": "smart-homes", "name": "Foxy's Lab", "feed_url": "https://www.foxyslab.com/sitemap.xml", "site_url": "https://www.foxyslab.com/blog", "weight": 10 },
+    { "category": "smart-homes", "name": "The Verge — Smart Home", "feed_url": "https://www.theverge.com/rss/smart-home/index.xml", "site_url": "https://www.theverge.com/smart-home", "weight": 4 },
+    { "category": "smart-homes", "name": "Stacey on IoT", "feed_url": "https://staceyoniot.com/feed/", "site_url": "https://staceyoniot.com/", "weight": 4 },
+    { "category": "smart-homes", "name": "Home Assistant Blog", "feed_url": "https://www.home-assistant.io/atom.xml", "site_url": "https://www.home-assistant.io/blog/", "weight": 3 },
+    { "category": "smart-homes", "name": "HomeKit News", "feed_url": "https://homekitnews.com/feed/", "site_url": "https://homekitnews.com/", "weight": 2 },
+
+    { "category": "gaming", "name": "Eurogamer", "feed_url": "https://www.eurogamer.net/feed", "site_url": "https://www.eurogamer.net/", "weight": 4 },
+    { "category": "gaming", "name": "Polygon", "feed_url": "https://www.polygon.com/rss/index.xml", "site_url": "https://www.polygon.com/", "weight": 4 },
+    { "category": "gaming", "name": "PC Gamer", "feed_url": "https://www.pcgamer.com/rss/", "site_url": "https://www.pcgamer.com/", "weight": 3 },
+    { "category": "gaming", "name": "Rock Paper Shotgun", "feed_url": "https://www.rockpapershotgun.com/feed", "site_url": "https://www.rockpapershotgun.com/", "weight": 3 },
+
+    { "category": "science", "name": "Quanta Magazine", "feed_url": "https://www.quantamagazine.org/feed/", "site_url": "https://www.quantamagazine.org/", "weight": 5 },
+    { "category": "science", "name": "ScienceDaily — Top Science", "feed_url": "https://www.sciencedaily.com/rss/top/science.xml", "site_url": "https://www.sciencedaily.com/", "weight": 3 },
+    { "category": "science", "name": "Space.com", "feed_url": "https://www.space.com/feeds/all", "site_url": "https://www.space.com/", "weight": 4 },
+    { "category": "science", "name": "Phys.org", "feed_url": "https://phys.org/rss-feed/", "site_url": "https://phys.org/", "weight": 3 },
+
+    { "category": "technology", "name": "Ars Technica", "feed_url": "https://feeds.arstechnica.com/arstechnica/index", "site_url": "https://arstechnica.com/", "weight": 5 },
+    { "category": "technology", "name": "The Verge", "feed_url": "https://www.theverge.com/rss/index.xml", "site_url": "https://www.theverge.com/", "weight": 4 },
+    { "category": "technology", "name": "TechCrunch", "feed_url": "https://techcrunch.com/feed/", "site_url": "https://techcrunch.com/", "weight": 3 },
+    { "category": "technology", "name": "Engadget", "feed_url": "https://www.engadget.com/rss.xml", "site_url": "https://www.engadget.com/", "weight": 3 }
+  ]
+}
