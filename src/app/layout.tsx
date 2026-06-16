@@ -34,6 +34,7 @@ export const metadata: Metadata = {
   },
   robots: { index: true, follow: true },
   alternates: { canonical: '/' },
+  other: { 'google-adsense-account': 'ca-pub-2552028648847975' },
 };
 
 export const viewport: Viewport = {
