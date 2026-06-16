@@ -23,6 +23,7 @@ const ARTICLE_COLUMNS = `
   a.id, a.slug, a.headline, a.blurb, a.body, a.hero_image, a.hero_image_alt,
   a.hero_credit, a.thumbnail_image, a.thumbnail_alt, a.category_id, a.author,
   a.source_name, a.source_url, a.video_youtube_id, a.reading_minutes, a.featured,
+  a.category_featured,
   a.published_at, c.slug AS category_slug, c.name AS category_name
 `;
 const FROM_ARTICLES = `FROM articles a LEFT JOIN categories c ON c.id = a.category_id`;
@@ -180,7 +181,7 @@ export function getArticlesForCategory(
     .prepare(
       `SELECT ${ARTICLE_COLUMNS} ${FROM_ARTICLES}
        WHERE a.category_id = ?
-       ORDER BY a.published_at DESC
+       ORDER BY a.category_featured DESC, a.published_at DESC
        LIMIT ? OFFSET ?`
     )
     .all(categoryId, perPage, offset) as Article[];

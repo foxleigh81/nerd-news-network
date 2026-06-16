@@ -103,7 +103,8 @@ to INSERT/UPDATE rows** — it should never need to change the schema. Dates are
 | `video_youtube_id`|          | If set, the article is built from a YouTube video; the player is embedded at the top of the page (see YouTube section) |
 | `video_duration_seconds` |   | Video length; used to keep the feed long-form only (exclude Shorts) and to show runtime |
 | `reading_minutes` |          | Optional; auto-estimated from `body` if omitted                 |
-| `featured`        |          | `1` marks the lead story for its page                           |
+| `featured`        |          | `1` marks the editorial lead story of the day / front-page lead |
+| `category_featured` |        | `1` marks the editorial lead story for that article's category page |
 | `published_at`    |    ✓     | ISO 8601 UTC; drives the front page, archive and ordering       |
 
 > ★ = strongly recommended for a complete, well-credited, accessible article.
@@ -211,6 +212,12 @@ everything else is fixed rules:
    step), set `headline`, `blurb`, `category_id`, `author`, `source_name` (the
    publisher), `source_url` (the canonical link), `published_at` (the source's
    real publish time) and the hero fields, then insert.
+10. **Editorial leads.** After inserting the day's batch, the task may choose the
+    best lead story of the day (`featured = 1`) and one lead story per category
+    (`category_featured = 1`). This is an editorial judgement call: prefer
+    broadly important, useful, surprising, high-signal stories over merely the
+    newest item. Clear old lead flags first so there is only one front-page lead
+    and one category lead per category.
 
 ### `youtube_channels` (video sources the daily task monitors)
 

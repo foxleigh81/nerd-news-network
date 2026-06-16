@@ -62,7 +62,8 @@ db.exec(`
     video_youtube_id TEXT,                         -- if set, the article is built from a YouTube video and embeds it at the top
     video_duration_seconds INTEGER,                -- video length; used to exclude Shorts (long-form only) and show runtime
     reading_minutes INTEGER,                       -- optional precomputed read time
-    featured        INTEGER NOT NULL DEFAULT 0,    -- 1 = lead story on its page
+    featured        INTEGER NOT NULL DEFAULT 0,    -- 1 = lead story of the day / front-page lead
+    category_featured INTEGER NOT NULL DEFAULT 0,  -- 1 = lead story for its category page
     published_at    TEXT NOT NULL,                 -- ISO 8601 UTC, e.g. 2026-06-14T09:30:00Z
     created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
@@ -127,6 +128,9 @@ if (!articleCols.includes('video_youtube_id')) {
 }
 if (!articleCols.includes('video_duration_seconds')) {
   db.exec('ALTER TABLE articles ADD COLUMN video_duration_seconds INTEGER');
+}
+if (!articleCols.includes('category_featured')) {
+  db.exec('ALTER TABLE articles ADD COLUMN category_featured INTEGER NOT NULL DEFAULT 0');
 }
 
 // Same for columns added after the categories/channels tables first shipped.

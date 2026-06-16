@@ -26,6 +26,7 @@ export interface Article {
   video_youtube_id: string | null;
   reading_minutes: number | null;
   featured: number;
+  category_featured: number;
   published_at: string; // ISO 8601 UTC
   // Joined fields:
   category_slug: string | null;
