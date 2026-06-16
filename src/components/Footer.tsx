@@ -2,9 +2,12 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { getCategories, buildNow } from '@/lib/db';
 import { SITE } from '@/lib/site';
-import { IconX, IconFacebook, IconLinkedIn, IconReddit, IconRss } from './icons';
+import { IconYouTube, IconRss } from './icons';
 import logo from '../../public/logo/logo.png';
 import styles from './Footer.module.css';
+
+const FOXYS_LAB_YOUTUBE = 'https://www.youtube.com/channel/UC_blM3yCdvOSzxakaj3178w';
+const FOXYS_LAB_SITE = 'https://www.foxyslab.com';
 
 export function Footer() {
   const categories = getCategories();
@@ -18,25 +21,23 @@ export function Footer() {
             <Image src={logo} alt={SITE.name} className={styles.logo} sizes="240px" />
           </Link>
           <p className={styles.mission}>{SITE.description}</p>
-          <ul className={styles.social} aria-label="Follow Nerd News Network">
+          <p className={styles.owner}>
+            Owned &amp; operated by{' '}
+            <a href={FOXYS_LAB_SITE} target="_blank" rel="noopener noreferrer">
+              Foxy’s Lab
+            </a>
+            .
+          </p>
+          <ul className={styles.social} aria-label={`Follow ${SITE.name}`}>
             <li>
-              <a href="#" aria-label="Follow on X" className={styles.socialLink}>
-                <IconX />
-              </a>
-            </li>
-            <li>
-              <a href="#" aria-label="Follow on Facebook" className={styles.socialLink}>
-                <IconFacebook />
-              </a>
-            </li>
-            <li>
-              <a href="#" aria-label="Follow on LinkedIn" className={styles.socialLink}>
-                <IconLinkedIn />
-              </a>
-            </li>
-            <li>
-              <a href="#" aria-label="Follow on Reddit" className={styles.socialLink}>
-                <IconReddit />
+              <a
+                href={FOXYS_LAB_YOUTUBE}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Foxy’s Lab on YouTube"
+                className={styles.socialLink}
+              >
+                <IconYouTube />
               </a>
             </li>
             <li>
@@ -92,9 +93,14 @@ export function Footer() {
       <div className={styles.legal}>
         <div className="container">
           <p>
-            © {year} {SITE.name}. {SITE.name} is a news-aggregation service. All articles
-            summarise and link to original reporting; rights remain with the respective
-            publishers.
+            © {year} {SITE.name}. Owned and operated by Foxy’s Lab. {SITE.name} is a
+            news-aggregation service. All articles summarise and link to original reporting;
+            rights remain with the respective publishers.
+          </p>
+          <p>
+            Articles are pulled from a curated list of sources, but the summaries are
+            AI-generated and may contain inaccuracies or hallucinations. Always check the
+            original source — linked in every article — for the definitive account.
           </p>
         </div>
       </div>
