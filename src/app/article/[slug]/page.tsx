@@ -136,6 +136,11 @@ export default async function ArticlePage({ params }: Params) {
         <figure className={styles.hero}>
           <SmartImage
             src={article.hero_image}
+            srcSet={
+              article.thumbnail_image && article.thumbnail_image !== article.hero_image
+                ? `${article.thumbnail_image} 640w, ${article.hero_image} 1280w`
+                : undefined
+            }
             alt={article.hero_image_alt ?? article.headline}
             width={1280}
             height={720}

@@ -13,10 +13,12 @@ type Props = {
   height: number;
   className?: string;
   sizes?: string;
+  /** Candidate set (e.g. "thumb.webp 640w, hero.webp 1280w"); pairs with `sizes`. */
+  srcSet?: string;
   priority?: boolean;
 };
 
-export function SmartImage({ src, alt, width, height, className, sizes, priority = false }: Props) {
+export function SmartImage({ src, alt, width, height, className, sizes, srcSet, priority = false }: Props) {
   if (!src) {
     return <div className={className} role="img" aria-label={alt} data-placeholder="true" />;
   }
@@ -27,7 +29,9 @@ export function SmartImage({ src, alt, width, height, className, sizes, priority
       alt={alt}
       width={width}
       height={height}
-      sizes={sizes}
+      srcSet={srcSet}
+      // `sizes` is only honoured by browsers when a `srcSet` is present.
+      sizes={srcSet ? sizes : undefined}
       className={className}
       loading={priority ? 'eager' : 'lazy'}
       decoding={priority ? 'auto' : 'async'}

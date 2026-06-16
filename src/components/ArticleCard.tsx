@@ -18,10 +18,18 @@ interface Props {
 export function ArticleCard({ article, variant = 'standard', headingLevel = 2, index = 0 }: Props) {
   const Heading = `h${headingLevel}` as 'h2' | 'h3' | 'h4';
   const href = `/article/${article.slug}`;
-  const thumb = article.thumbnail_image || article.hero_image;
-  const alt = article.thumbnail_alt || article.hero_image_alt || article.headline;
   const isLead = variant === 'lead';
   const isCompact = variant === 'compact';
+  const alt = article.thumbnail_alt || article.hero_image_alt || article.headline;
+
+  // The lead is rendered large, so prefer the full-resolution hero; smaller
+  // cards lead with the lighter thumbnail. When both renditions exist they form
+  // a srcset so the browser can pick the right one for the display size.
+  const hero = article.hero_image;
+  const thumbImg = article.thumbnail_image;
+  const src = isLead ? hero || thumbImg : thumbImg || hero;
+  const srcSet =
+    hero && thumbImg && hero !== thumbImg ? `${thumbImg} 640w, ${hero} 1280w` : undefined;
 
   return (
     <article
@@ -31,7 +39,8 @@ export function ArticleCard({ article, variant = 'standard', headingLevel = 2, i
     >
       <Link href={href} className={styles.media} tabIndex={-1} aria-hidden="true">
         <SmartImage
-          src={thumb}
+          src={src}
+          srcSet={isCompact ? undefined : srcSet}
           alt={alt}
           width={isLead ? 1280 : 640}
           height={isLead ? 720 : 360}
