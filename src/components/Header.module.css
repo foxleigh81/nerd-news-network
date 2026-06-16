@@ -52,7 +52,11 @@
 /* ------------------------------ Masthead --------------------------------- */
 .masthead {
   position: relative;
-  background: var(--brand-grey);
+  background-color: var(--brand-grey);
+  background-image: url('/header-bg.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 .mastheadInner {
   max-width: var(--container);
