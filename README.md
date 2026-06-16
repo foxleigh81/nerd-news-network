@@ -216,8 +216,10 @@ everything else is fixed rules:
     best lead story of the day (`featured = 1`) and one lead story per category
     (`category_featured = 1`). This is an editorial judgement call: prefer
     broadly important, useful, surprising, high-signal stories over merely the
-    newest item. Clear old lead flags first so there is only one front-page lead
-    and one category lead per category.
+    newest item. **Exception: if Foxy's Lab publishes a video or article on the
+    local run date, that Foxy's Lab item must be the front-page lead story and
+    the Smart Homes category lead. No exceptions.** Clear old lead flags first
+    so there is only one front-page lead and one category lead per category.
 
 ### `youtube_channels` (video sources the daily task monitors)
 
