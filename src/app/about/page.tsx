@@ -119,7 +119,7 @@ export default function AboutPage() {
         <h2 id="contact">Contact</h2>
         <p>
           Spotted an error, or want to suggest a story or channel? We’d love to hear from you. Reach
-          the team at <a href="mailto:hello@nerdnews.network">hello@nerdnews.network</a>.
+          the team at <a href="mailto:hello@nerdnewsnetwork.com">hello@nerdnewsnetwork.com</a>.
         </p>
       </div>
     </div>

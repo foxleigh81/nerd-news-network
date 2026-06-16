@@ -7,7 +7,7 @@ export const SITE = {
   description:
     'Nerd News Network aggregates and summarises the day’s most important stories in technology, gaming, science, space, AI and culture — clearly, quickly and with credit to the original source.',
   // Used for absolute URLs in metadata, sitemaps and social cards.
-  url: process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || 'https://nerdnews.network',
+  url: process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || 'https://nerdnewsnetwork.com',
   locale: 'en_GB',
   // Default social handle (used for Twitter/X cards).
   social: {
