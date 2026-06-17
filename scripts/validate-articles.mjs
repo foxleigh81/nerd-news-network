@@ -29,13 +29,19 @@ export function hasInlineMarkdownArtifacts(body) {
     // literal text.
     const headingNotAtLineStart = /\S[ \t]+#{2,6}\s+\S/.test(trimmed);
 
-    // A flattened section can also start with a heading and keep the first list
-    // item on the same line: `## The short version - item`. Prose may contain
-    // `foo - bar` or `Width * Standard`, so only treat marker-looking text as a
-    // failure when it is glued to a Markdown heading line.
+    // A flattened section can also start with a known NNN section heading but
+    // keep article prose on the same line: `## What happened NASA...`. Markdown
+    // renders that as a huge heading containing the whole paragraph. It is valid
+    // Markdown syntactically, but invalid for our article format.
+    const knownSectionHasInlineProse = /^##\s+(The short version|What happened|Why it matters)\s+\S/.test(trimmed);
+
+    // Keep the generic marker check as a backstop for section headings glued to
+    // list-like text. Prose may contain `foo - bar` or `Width * Standard`, so
+    // only treat marker-looking text as a failure when it is glued to a Markdown
+    // heading line.
     const headingLineContainsListMarker = /^#{2,6}\s+.*\s[-*]\s+\S/.test(trimmed);
 
-    return headingNotAtLineStart || headingLineContainsListMarker;
+    return headingNotAtLineStart || knownSectionHasInlineProse || headingLineContainsListMarker;
   });
 }
 
@@ -47,7 +53,7 @@ export function validateArticleRows(rows) {
       failures.push({
         slug: row.slug,
         headline: row.headline,
-        reason: 'body contains inline markdown markers that will render as raw text',
+        reason: 'body contains inline markdown markers that will render as raw or malformed article text',
       });
     }
   }

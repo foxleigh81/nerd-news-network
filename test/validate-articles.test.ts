@@ -8,6 +8,20 @@ describe('article body validation', () => {
     expect(hasInlineMarkdownArtifacts(body)).toBe(true);
   });
 
+  it('flags known section headings that keep article prose on the heading line', () => {
+    const body = [
+      'Intro sentence.',
+      '',
+      '## The short version First bullet sentence continues on the same line.',
+      '',
+      '## What happened More article prose is glued to the heading.',
+      '',
+      '## Why it matters Science readers should care because this sentence is content, not a heading.',
+    ].join('\n');
+
+    expect(hasInlineMarkdownArtifacts(body)).toBe(true);
+  });
+
   it('accepts properly separated markdown sections and lists', () => {
     const body = [
       'Intro sentence.',
@@ -16,6 +30,10 @@ describe('article body validation', () => {
       '',
       '- First bullet',
       '- Second bullet',
+      '',
+      '## What happened',
+      '',
+      'Article prose starts after the heading.',
       '',
       '## Why it matters',
       '',
