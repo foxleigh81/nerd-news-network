@@ -46,7 +46,7 @@ the `NNN_DB_PATH` env var.
 Build the static site:
 
 ```bash
-npm run build      # regenerates logo assets + ensures schema, then exports to ./out
+npm run build      # regenerates assets/schema, exports to ./out, then validates articles
 npm run start      # serve the ./out directory locally
 ```
 
@@ -58,7 +58,8 @@ Pages, GitHub Pages, S3/CloudFront, or any static host.
 | Script               | Description                                                    |
 | -------------------- | ------------------------------------------------------------- |
 | `npm run dev`        | Seed the mock DB (`nnn.dev.db`) if empty, then `next dev`     |
-| `npm run build`      | Build logo assets, ensure prod DB schema, `next build` (export)|
+| `npm run build`      | Build logo assets, ensure prod DB schema, `next build` export, then validate article formatting |
+| `npm run validate:articles` | Fail if article Markdown would render raw/flattened on the site |
 | `npm run seed`       | Seed the **mock** DB (`nnn.dev.db`) only if it is empty       |
 | `npm run seed:reset` | Wipe and re-seed the **mock** DB with the sample data set     |
 | `npm run images`     | Download real lead images from each source (placeholders only)|
@@ -96,7 +97,7 @@ to INSERT/UPDATE rows** — it should never need to change the schema. Dates are
 | `slug`            |    ✓     | Unique URL slug → `/article/<slug>`                              |
 | `headline`        |    ✓     | Story headline                                                   |
 | `blurb`           |    ✓     | 1–2 sentence summary (used on cards + as meta description)       |
-| `body`            |    ✓     | **Markdown** article content (sanitised at build)               |
+| `body`            |    ✓     | **Markdown** article content (sanitised at build); headings/lists must be line-separated so raw Markdown never renders inline |
 | `hero_image`      |          | Hero image URL (any host). 16:9 recommended (e.g. 1280×720)     |
 | `hero_image_alt`  |   ★      | Alt text — **always provide for accessibility**                 |
 | `hero_credit`     |          | Image credit line                                               |
