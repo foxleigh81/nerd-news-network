@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasInlineMarkdownArtifacts, validateArticleRows } from '../scripts/validate-articles.mjs';
+import { hasInlineMarkdownArtifacts, hasReadabilityRetentionIssues, validateArticleRows } from '../scripts/validate-articles.mjs';
 
 describe('article body validation', () => {
   it('flags markdown headings and bullets that have been flattened into a paragraph', () => {
@@ -68,6 +68,102 @@ describe('article body validation', () => {
       expect.objectContaining({
         slug: 'quantum-lab-aboard-space-station-gets-chilly-upgrade',
         reason: expect.stringContaining('inline markdown'),
+      }),
+    ]);
+  });
+
+  it('flags repeated article sections that make the story tedious to read', () => {
+    const body = [
+      'A new smart-home standard update tries to make device setup less painful.',
+      '',
+      '## What changed',
+      '',
+      'The update adds NFC commissioning, shared fabric controls and cleaner onboarding so households can add devices without digging through confusing setup menus.',
+      '',
+      '## Why it matters',
+      '',
+      'The update adds NFC commissioning, shared fabric controls and cleaner onboarding so households can add devices without digging through confusing setup menus.',
+      '',
+      '> Summary by Nerd News Network. Read the full article at **Example** via the links above and below.',
+    ].join('\n');
+
+    expect(hasReadabilityRetentionIssues(body)).toBe(true);
+  });
+
+  it('flags article sections that have a heading but no readable content', () => {
+    const body = [
+      'Intro paragraph sets up the story.',
+      '',
+      '## What happened',
+      '',
+      '## Why it matters',
+      '',
+      'The useful context finally appears here.',
+    ].join('\n');
+
+    expect(hasReadabilityRetentionIssues(body)).toBe(true);
+  });
+
+  it('flags publisher boilerplate contamination that repeats topic subscription copy', () => {
+    const body = [
+      'The company announced a useful product update today.',
+      '',
+      '## What happened',
+      '',
+      'Tech Close Tech Posts from this topic will be added to your daily email digest and your homepage feed.',
+      '',
+      '## Context',
+      '',
+      'The actual story is buried under copied website navigation text.',
+    ].join('\n');
+
+    expect(hasReadabilityRetentionIssues(body)).toBe(true);
+  });
+
+  it('accepts concise articles where bullets briefly reinforce the intro without duplicating sections', () => {
+    const body = [
+      'Matter 1.6 adds NFC setup and joint-fabric controls for smart-home devices.',
+      '',
+      '## The short version',
+      '',
+      '- NFC pairing should reduce setup friction.',
+      '- Joint fabrics make shared households easier to manage.',
+      '',
+      '## What changed',
+      '',
+      'The spec now gives device makers a standard way to handle tap-to-pair setup and multi-admin control.',
+      '',
+      '## Why it matters',
+      '',
+      'Less brittle onboarding means fewer users abandon otherwise useful smart-home gear during installation.',
+    ].join('\n');
+
+    expect(hasReadabilityRetentionIssues(body)).toBe(false);
+  });
+
+  it('reports readability failures from the article rows validator', () => {
+    const failures = validateArticleRows([
+      {
+        slug: 'matter-repeat',
+        headline: 'Matter update repeats itself',
+        body: [
+          'Matter has a new setup flow.',
+          '',
+          '## What changed',
+          '',
+          'The update adds NFC commissioning, shared fabric controls and cleaner onboarding so households can add devices without digging through confusing setup menus.',
+          '',
+          '## Why it matters',
+          '',
+          'The update adds NFC commissioning, shared fabric controls and cleaner onboarding so households can add devices without digging through confusing setup menus.',
+        ].join('\n'),
+      },
+    ]);
+
+    expect(failures).toEqual([
+      expect.objectContaining({
+        slug: 'matter-repeat',
+        reason: expect.stringContaining('readability'),
       }),
     ]);
   });
