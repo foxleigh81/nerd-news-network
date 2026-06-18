@@ -20,6 +20,11 @@ const DB_PATH = process.env.NNN_DB_PATH || DEFAULT_DB;
 export function hasInlineMarkdownArtifacts(body) {
   if (!body || typeof body !== 'string') return false;
 
+  // Escaped newline markers should never be visible in published article copy.
+  // They usually mean the generator wrote `\n` text instead of real newlines.
+  const literalNewlineTag = /\\n|(^|\s)\/n(?=\s|$)/.test(body);
+  if (literalNewlineTag) return true;
+
   return body.split(/\n{2,}/).some((paragraph) => {
     const trimmed = paragraph.trim();
     if (!trimmed) return false;
@@ -53,7 +58,7 @@ export function validateArticleRows(rows) {
       failures.push({
         slug: row.slug,
         headline: row.headline,
-        reason: 'body contains inline markdown markers that will render as raw or malformed article text',
+        reason: 'body contains inline markdown markers or literal newline tags that will render as raw or malformed article text',
       });
     }
   }

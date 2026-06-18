@@ -22,6 +22,12 @@ describe('article body validation', () => {
     expect(hasInlineMarkdownArtifacts(body)).toBe(true);
   });
 
+  it('flags literal newline escape tags in article prose', () => {
+    const body = 'Intro paragraph.\\n\\n## What happened\\nThis should have been real line breaks, not visible newline tags.';
+
+    expect(hasInlineMarkdownArtifacts(body)).toBe(true);
+  });
+
   it('accepts properly separated markdown sections and lists', () => {
     const body = [
       'Intro sentence.',
