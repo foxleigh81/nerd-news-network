@@ -2,10 +2,12 @@
 
 import Database from 'better-sqlite3';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensureImageQualityColumns, scoreArticleImage, updateArticleImageQuality } from './image-quality.mjs';
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 const DEFAULT_DB = join(__dirname, '..', 'data', 'nnn.db');
 const DB_PATH = process.env.NNN_DB_PATH || DEFAULT_DB;
 
@@ -174,15 +176,39 @@ export function validateArticleRows(rows) {
   return failures;
 }
 
-function main() {
+async function validateAndScoreImages(db, rows) {
+  const findings = [];
+  for (const row of rows) {
+    const result = await scoreArticleImage(row, { root: join(__dirname, '..'), allowRemote: true, role: 'hero' });
+    updateArticleImageQuality(db, row.id, result);
+    if (result.status === 'missing' || result.status === 'reject' || result.status === 'weak') {
+      findings.push({
+        slug: row.slug,
+        headline: row.headline,
+        reason: `image is ${result.status}: ${result.score}/100 — ${result.reason}`,
+        fatal: result.status === 'missing' || result.status === 'reject',
+      });
+    }
+  }
+  return findings;
+}
+
+async function main() {
   if (!existsSync(DB_PATH)) {
     console.error(`[validate:articles] Database not found: ${DB_PATH}`);
     process.exit(1);
   }
 
-  const db = new Database(DB_PATH, { readonly: true });
-  const rows = db.prepare('SELECT slug, headline, body FROM articles ORDER BY published_at DESC, id DESC').all();
-  const failures = validateArticleRows(rows);
+  const db = new Database(DB_PATH);
+  ensureImageQualityColumns(db);
+  const rows = db.prepare('SELECT id, slug, headline, body, hero_image, thumbnail_image, source_url FROM articles ORDER BY published_at DESC, id DESC').all();
+  const contentFailures = validateArticleRows(rows);
+  const imageFindings = await validateAndScoreImages(db, rows);
+  const strictImages = process.argv.includes('--strict-images');
+  const failures = [
+    ...contentFailures,
+    ...(strictImages ? imageFindings.filter((finding) => finding.fatal) : []),
+  ];
 
   if (failures.length > 0) {
     console.error(`[validate:articles] Found ${failures.length} article validation failure(s):`);
@@ -193,9 +219,27 @@ function main() {
     process.exit(1);
   }
 
+  if (imageFindings.length > 0) {
+    const fatalImages = imageFindings.filter((finding) => finding.fatal).length;
+    console.warn(
+      `[validate:articles] Image quality warnings: ${imageFindings.length} article(s), ${fatalImages} missing/rejected. ` +
+        'They remain published but are discounted in feed ranking.'
+    );
+    for (const finding of imageFindings.slice(0, 40)) {
+      console.warn(`- ${finding.slug}: ${finding.reason}`);
+      console.warn(`  ${finding.headline}`);
+    }
+    if (imageFindings.length > 40) {
+      console.warn(`- …and ${imageFindings.length - 40} more image warning(s).`);
+    }
+  }
+
   console.log(`[validate:articles] OK — ${rows.length} article(s) checked.`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
+  main().catch((err) => {
+    console.error(`[validate:articles] ${err.stack || err.message}`);
+    process.exit(1);
+  });
 }

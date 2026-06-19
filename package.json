@@ -13,6 +13,7 @@
     "lint": "next lint",
     "test": "vitest run",
     "validate:articles": "node scripts/validate-articles.mjs",
+    "validate:images": "node scripts/validate-articles.mjs --strict-images",
     "test:watch": "vitest",
     "seed": "node scripts/seed.mjs --dev",
     "seed:reset": "node scripts/seed.mjs --dev --reset",

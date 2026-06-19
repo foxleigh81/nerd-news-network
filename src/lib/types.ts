@@ -27,6 +27,9 @@ export interface Article {
   reading_minutes: number | null;
   featured: number;
   category_featured: number;
+  image_quality_score: number;
+  image_quality_status: 'front-page' | 'usable' | 'weak' | 'reject' | 'missing' | 'unscored';
+  image_quality_reason: string | null;
   published_at: string; // ISO 8601 UTC
   // Joined fields:
   category_slug: string | null;

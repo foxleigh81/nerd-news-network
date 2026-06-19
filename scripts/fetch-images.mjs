@@ -19,6 +19,12 @@ import sharp from 'sharp';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  ensureImageQualityColumns,
+  scoreArticleImage,
+  scoreImageBuffer,
+  updateArticleImageQuality,
+} from './image-quality.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -32,12 +38,13 @@ const UA =
 
 const db = new Database(DB_PATH);
 db.pragma('foreign_keys = ON');
+ensureImageQualityColumns(db);
 
 const isPlaceholder = (url) => !url || url.includes('picsum.photos');
-const rows = db
-  .prepare('SELECT id, slug, headline, source_name, source_url, hero_image FROM articles ORDER BY id')
-  .all()
-  .filter((r) => r.source_url && (FORCE || isPlaceholder(r.hero_image)));
+const allRows = db
+  .prepare('SELECT id, slug, headline, source_name, source_url, hero_image, thumbnail_image FROM articles ORDER BY id')
+  .all();
+const rows = allRows.filter((r) => r.source_url && (FORCE || isPlaceholder(r.hero_image)));
 
 console.log(`[images] ${rows.length} article(s) to process${FORCE ? ' (force)' : ''}.`);
 
@@ -105,6 +112,11 @@ async function processArticle(row) {
   });
   if (!imgRes.ok) throw new Error(`image HTTP ${imgRes.status}`);
   const buf = Buffer.from(await imgRes.arrayBuffer());
+  const quality = await scoreImageBuffer(buf, img.url, { role: 'hero', byteLength: buf.byteLength });
+  if (quality.status === 'missing' || quality.status === 'reject') {
+    updateArticleImageQuality(db, row.id, quality);
+    throw new Error(`image rejected by quality gate: ${quality.score}/100 (${quality.reason})`);
+  }
 
   // Optimise into a 16:9 hero and thumbnail (WebP for size/perf).
   const heroFile = `${row.slug}-hero.webp`;
@@ -120,6 +132,9 @@ async function processArticle(row) {
     `UPDATE articles
      SET hero_image = @hero, thumbnail_image = @thumb,
          hero_image_alt = @alt, thumbnail_alt = @alt, hero_credit = @credit,
+         image_quality_score = @score,
+         image_quality_status = @status,
+         image_quality_reason = @reason,
          updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
      WHERE id = @id`
   ).run({
@@ -128,6 +143,9 @@ async function processArticle(row) {
     thumb: `/images/${thumbFile}`,
     alt,
     credit,
+    score: quality.score,
+    status: quality.status,
+    reason: quality.reason,
   });
 
   return img.url;
@@ -153,5 +171,23 @@ async function worker() {
 }
 await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
-console.log(`[images] done: ${ok} fetched, ${failed} kept placeholder.`);
+console.log('[images] validating existing article image files.');
+let validationMissing = 0;
+let validationWeak = 0;
+const refreshedRows = db
+  .prepare('SELECT id, slug, headline, source_url, hero_image, thumbnail_image FROM articles ORDER BY published_at DESC, id DESC')
+  .all();
+for (const row of refreshedRows) {
+  const result = await scoreArticleImage(row, { root: ROOT, allowRemote: true, role: 'hero' });
+  updateArticleImageQuality(db, row.id, result);
+  if (result.status === 'missing' || result.status === 'reject') {
+    validationMissing++;
+    console.warn(`  ! ${row.slug} image ${result.status}: ${result.reason}`);
+  } else if (result.status === 'weak') {
+    validationWeak++;
+    console.warn(`  ~ ${row.slug} weak image: ${result.score}/100 (${result.reason})`);
+  }
+}
+
+console.log(`[images] done: ${ok} fetched, ${failed} kept placeholder; ${validationMissing} missing/rejected, ${validationWeak} weak after validation.`);
 db.close();

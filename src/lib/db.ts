@@ -28,10 +28,22 @@ const ARTICLE_COLUMNS = `
   a.id, a.slug, a.headline, a.blurb, a.body, a.hero_image, a.hero_image_alt,
   a.hero_credit, a.thumbnail_image, a.thumbnail_alt, a.category_id, a.author,
   a.source_name, a.source_url, a.video_youtube_id, a.reading_minutes, a.featured,
-  a.category_featured,
+  a.category_featured, a.image_quality_score, a.image_quality_status, a.image_quality_reason,
   a.published_at, c.slug AS category_slug, c.name AS category_name
 `;
 const FROM_ARTICLES = `FROM articles a LEFT JOIN categories c ON c.id = a.category_id`;
+const USABLE_IMAGE_SCORE = 60;
+const IMAGE_DISCOUNTED_PUBLISHED_SQL = `
+  datetime(
+    a.published_at,
+    CASE
+      WHEN COALESCE(a.image_quality_score, 0) >= ${USABLE_IMAGE_SCORE} THEN '0 days'
+      WHEN COALESCE(a.image_quality_score, 0) >= 40 THEN '-7 days'
+      ELSE '-30 days'
+    END
+  ) DESC,
+  COALESCE(a.image_quality_score, 0) DESC
+`;
 
 // ---------------------------------------------------------------------------
 // Build-time "now". A static build represents a single calendar moment; allow
@@ -107,7 +119,8 @@ export function getArticlesForMonth(
     .prepare(
       `SELECT ${ARTICLE_COLUMNS} ${FROM_ARTICLES}
        WHERE a.published_at >= ? AND a.published_at < ?
-       ORDER BY a.featured DESC, a.published_at DESC
+       ORDER BY CASE WHEN a.featured = 1 AND COALESCE(a.image_quality_score, 0) >= ${USABLE_IMAGE_SCORE} THEN 1 ELSE 0 END DESC,
+                ${IMAGE_DISCOUNTED_PUBLISHED_SQL}
        LIMIT ? OFFSET ?`
     )
     .all(start, end, limit, offset) as Article[];
@@ -186,7 +199,8 @@ export function getArticlesForCategory(
     .prepare(
       `SELECT ${ARTICLE_COLUMNS} ${FROM_ARTICLES}
        WHERE a.category_id = ?
-       ORDER BY a.category_featured DESC, a.published_at DESC
+       ORDER BY CASE WHEN a.category_featured = 1 AND COALESCE(a.image_quality_score, 0) >= ${USABLE_IMAGE_SCORE} THEN 1 ELSE 0 END DESC,
+                ${IMAGE_DISCOUNTED_PUBLISHED_SQL}
        LIMIT ? OFFSET ?`
     )
     .all(categoryId, perPage, offset) as Article[];
@@ -211,7 +225,7 @@ export function getRecentArticles(opts: { limit?: number; excludeId?: number; wi
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   params.push(limit);
   return db()
-    .prepare(`SELECT ${ARTICLE_COLUMNS} ${FROM_ARTICLES} ${where} ORDER BY a.published_at DESC LIMIT ?`)
+    .prepare(`SELECT ${ARTICLE_COLUMNS} ${FROM_ARTICLES} ${where} ORDER BY ${IMAGE_DISCOUNTED_PUBLISHED_SQL} LIMIT ?`)
     .all(...params) as Article[];
 }
 

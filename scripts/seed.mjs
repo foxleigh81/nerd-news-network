@@ -21,6 +21,7 @@ import Database from 'better-sqlite3';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensureImageQualityColumns } from './image-quality.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, '..', 'data');
@@ -62,6 +63,9 @@ db.exec(`
     hero_credit     TEXT,                          -- image credit line
     thumbnail_image TEXT,                          -- optional; falls back to hero
     thumbnail_alt   TEXT,                          -- optional; falls back to hero alt
+    image_quality_score INTEGER NOT NULL DEFAULT 0, -- 0-100; set by scripts/fetch-images.mjs / validate-articles.mjs
+    image_quality_status TEXT NOT NULL DEFAULT 'unscored', -- front-page, usable, weak, reject, missing, unscored
+    image_quality_reason TEXT,                     -- short diagnostic for discounting/rejection
     category_id     INTEGER REFERENCES categories(id),
     author          TEXT NOT NULL DEFAULT 'NNN Staff',
     source_name     TEXT,                          -- original source (aggregation credit)
@@ -139,6 +143,7 @@ if (!articleCols.includes('video_duration_seconds')) {
 if (!articleCols.includes('category_featured')) {
   db.exec('ALTER TABLE articles ADD COLUMN category_featured INTEGER NOT NULL DEFAULT 0');
 }
+ensureImageQualityColumns(db);
 
 // Same for columns added after the categories/channels tables first shipped.
 const categoryCols = db.prepare('PRAGMA table_info(categories)').all().map((c) => c.name);
@@ -1748,11 +1753,13 @@ const ARTICLES = [
 const insertArticle = db.prepare(`
   INSERT INTO articles (
     slug, headline, blurb, body, hero_image, hero_image_alt, hero_credit,
-    thumbnail_image, thumbnail_alt, category_id, author, source_name, source_url,
+    thumbnail_image, thumbnail_alt, image_quality_score, image_quality_status, image_quality_reason,
+    category_id, author, source_name, source_url,
     video_youtube_id, video_duration_seconds, reading_minutes, featured, published_at
   ) VALUES (
     @slug, @headline, @blurb, @body, @hero_image, @hero_image_alt, @hero_credit,
-    @thumbnail_image, @thumbnail_alt, @category_id, @author, @source_name, @source_url,
+    @thumbnail_image, @thumbnail_alt, 0, 'unscored', NULL,
+    @category_id, @author, @source_name, @source_url,
     @video_youtube_id, @video_duration_seconds, @reading_minutes, @featured, @published_at
   )
 `);
