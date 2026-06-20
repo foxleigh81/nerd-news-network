@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ensureImageQualityColumns, scoreArticleImage, updateArticleImageQuality } from './image-quality.mjs';
+import { ensureImageQualityColumns, scoreArticleImage } from './image-quality.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -70,6 +70,11 @@ const BOILERPLATE_PATTERNS = [
   /\bget the biggest gaming news, reviews, and releases straight to your inbox\b/i,
   /\bbreaking space news, the latest updates on rocket launches\b/i,
   /\bread a sci-fi short story every month\b/i,
+  /\bScienceDaily\s+Science News from research organizations\b/i,
+  /\bDate:\s+[A-Z][a-z]+\s+\d{1,2},\s+\d{4}\s+Source:\b/i,
+  /\bShare:\s+Facebook\s+Twitter\s+Pinterest\s+LinkedIN\s+Email\s+FULL STORY\b/i,
+  /\bWatch on YouTube\b/i,
+  /\bSteam Next Fest\s+-\s+June\s+2026\s+Edition:\s+Official Trailer\b/i,
   /\bwatch as\s+[^.?!]{10,}\b(?:unpack|discuss|explain|break down|talk through)\b/i,
   /\bour regular weekly feature where we talk about the games we've been playing\b/i,
   /\bwhat have you been playing\??$/i,
@@ -81,6 +86,21 @@ const BROKEN_TEXT_PATTERNS = [
   /\bcomes in a new handset[.!?…]?["')\]]?$/i,
   /\b[a-z]\.["')\]]?$/,
 ];
+
+const AGENT_OUTPUT_PATTERNS = [
+  /\bhere(?:'s| is)\s+(?:the|an?)\s+(?:article|summary|draft)\b/i,
+  /\bi\s+(?:have|'ve)\s+(?:summari[sz]ed|written|created|generated|drafted)\b/i,
+  /\bas an ai\b/i,
+  /\bi (?:can|can't|cannot|will|would)\s+(?:help|write|summari[sz]e|draft|create|provide)\b/i,
+  /\b(?:draft|final)\s+(?:article|summary):\s*$/im,
+  /\bplaceholder(?:\s+text)?\b/i,
+  /\bTODO:\b/i,
+];
+
+export function hasAgentOutputArtifacts(text) {
+  if (!text || typeof text !== 'string') return false;
+  return AGENT_OUTPUT_PATTERNS.some((pattern) => pattern.test(text));
+}
 
 function normalizeReadableText(text) {
   return String(text || '')
@@ -203,6 +223,18 @@ function hasEmptySections(body) {
   return Boolean(currentHeading && !currentHasContent);
 }
 
+function hasMalformedAttribution(body) {
+  const text = String(body || '').trim();
+  const attributionBlocks = text
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter((block) => /^>\s*Summary by Nerd News Network/i.test(block));
+
+  if (attributionBlocks.length === 0) return false;
+  if (attributionBlocks.length !== 1) return true;
+  return !/^>\s*Summary by Nerd News Network\. (?:(?:Read the full article at \*\*[^*]+\*\* via the links above and below\.)|(?:Read the full original at \*\*[^*]+\*\* via the source link\.)|(?:Watch the full video at \*\*[^*]+\*\* via the links above and below\.))$/i.test(attributionBlocks[0]);
+}
+
 export function hasHeadlineQualityIssues(headline) {
   if (!headline || typeof headline !== 'string') return true;
   const trimmed = headline.trim();
@@ -254,6 +286,15 @@ export function validateArticleRows(rows) {
   const failures = [];
 
   for (const row of rows) {
+    const combinedText = [row.headline, row.blurb, row.body].filter(Boolean).join('\n');
+    if (hasAgentOutputArtifacts(combinedText)) {
+      failures.push({
+        slug: row.slug,
+        headline: row.headline,
+        reason: 'article contains visible agent output, draft wording, or production instructions',
+      });
+    }
+
     if (hasInlineMarkdownArtifacts(row.body)) {
       failures.push({
         slug: row.slug,
@@ -278,6 +319,14 @@ export function validateArticleRows(rows) {
       });
     }
 
+    if (hasMalformedAttribution(row.body)) {
+      failures.push({
+        slug: row.slug,
+        headline: row.headline,
+        reason: 'body has malformed Nerd News Network attribution footer',
+      });
+    }
+
     if (hasReadabilityRetentionIssues(row.body)) {
       failures.push({
         slug: row.slug,
@@ -294,7 +343,6 @@ async function validateAndScoreImages(db, rows) {
   const findings = [];
   for (const row of rows) {
     const result = await scoreArticleImage(row, { root: join(__dirname, '..'), allowRemote: true, role: 'hero' });
-    updateArticleImageQuality(db, row.id, result);
     if (result.status === 'missing' || result.status === 'reject' || result.status === 'weak') {
       findings.push({
         slug: row.slug,

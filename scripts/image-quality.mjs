@@ -227,13 +227,18 @@ export async function scoreArticleImage(row, { root = DEFAULT_ROOT, allowRemote 
 }
 
 export function updateArticleImageQuality(db, id, result) {
-  db.prepare(
+  return db.prepare(
     `UPDATE articles
      SET image_quality_score = @score,
          image_quality_status = @status,
          image_quality_reason = @reason,
          updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
-     WHERE id = @id`
+     WHERE id = @id
+       AND (
+         image_quality_score IS NOT @score OR
+         image_quality_status IS NOT @status OR
+         image_quality_reason IS NOT @reason
+       )`
   ).run({
     id,
     score: result.score ?? 0,

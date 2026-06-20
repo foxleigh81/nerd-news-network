@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '\n[pre-commit] Running deterministic Nerd News Network validation...\n'
+
+npm test
+npm run validate:articles
+npm run build
+npm run validate:output
+
+if ! git diff --quiet; then
+  printf '\n[pre-commit] Validation/build changed tracked files. Review and stage those changes before committing.\n' >&2
+  git status --short >&2
+  exit 1
+fi
+
+printf '[pre-commit] OK — tests, article validator, build, rendered-output validator, and dirty-worktree guard passed.\n'

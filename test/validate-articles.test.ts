@@ -204,6 +204,80 @@ describe('article body validation', () => {
     expect(hasHeadlineQualityIssues('New JWST images open up the cosmic noon frontier')).toBe(false);
   });
 
+  it('flags visible agent output and draft instructions in article text', () => {
+    const failures = validateArticleRows([
+      {
+        slug: 'agent-draft',
+        headline: 'A normal headline about robots',
+        blurb: 'Researchers showed a robot control system that reacts quickly enough for real-time industrial work.',
+        body: [
+          'Here is the article draft you requested. I have summarized the source below for the reader.',
+          '',
+          '## What happened',
+          '',
+          'The actual story should not contain assistant narration or production notes.',
+        ].join('\n'),
+      },
+    ]);
+
+    expect(failures).toContainEqual(expect.objectContaining({
+      slug: 'agent-draft',
+      reason: expect.stringContaining('agent'),
+    }));
+  });
+
+  it('flags source-page boilerplate copied into article bullets', () => {
+    const failures = validateArticleRows([
+      {
+        slug: 'science-daily-boilerplate',
+        headline: 'New study explores disease spread',
+        blurb: 'Researchers found a disease can spread silently between animals in ways that merit closer monitoring.',
+        body: [
+          'Researchers found a disease can spread silently between animals.',
+          '',
+          '## The short version',
+          '',
+          '- New study explores potential cross-species spread of chronic wasting disease | ScienceDaily Science News from research organizations.',
+          '- Date: June 16, 2026 Source: University of Calgary Summary: A new study found infectious prions in animals without symptoms.',
+          '- Share: Facebook Twitter Pinterest LinkedIN Email FULL STORY Scientists uncovered a hidden side of the disease.',
+          '',
+          '## Why it matters',
+          '',
+          'Readers need the science finding, not copied publisher navigation and sharing furniture.',
+        ].join('\n'),
+      },
+    ]);
+
+    expect(failures).toContainEqual(expect.objectContaining({
+      slug: 'science-daily-boilerplate',
+      reason: expect.stringContaining('boilerplate'),
+    }));
+  });
+
+  it('flags incomplete Nerd News Network attribution footers', () => {
+    const failures = validateArticleRows([
+      {
+        slug: 'broken-footer',
+        headline: 'A normal headline about space research',
+        blurb: 'Researchers proposed safer lunar construction rules for future moon bases.',
+        body: [
+          'Researchers proposed safer lunar construction rules for future moon bases.',
+          '',
+          '## Why it matters',
+          '',
+          'A consistent standard would help crews build habitats without repeating avoidable mistakes.',
+          '',
+          '> Summary by Nerd News Network. Read the full article at',
+        ].join('\n'),
+      },
+    ]);
+
+    expect(failures).toContainEqual(expect.objectContaining({
+      slug: 'broken-footer',
+      reason: expect.stringContaining('attribution'),
+    }));
+  });
+
   it('accepts concise articles where bullets briefly reinforce the intro without duplicating sections', () => {
     const body = [
       'Matter 1.6 adds NFC setup and joint-fabric controls for smart-home devices.',
