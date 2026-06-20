@@ -209,17 +209,33 @@ everything else is fixed rules:
    equal **as much as possible**, never padded with filler. This per-category
    budget is shared with the video flow below (written + video together count
    toward the category's daily quota).
-8. **Hard validation gate — reject, don't patch.** Before writing, a candidate
-   must have **both** a `source_url` (the deep link) and a usable hero image.
-   Resolve the image from the task or the article's Open Graph / Twitter card
-   (`scripts/fetch-images.mjs` does the latter). **If no real image resolves,
-   reject the candidate and promote the next-highest-scoring story** — never
-   publish with a placeholder. Likewise reject anything missing `source_url`.
+8. **Hard validation gate + backfill — reject, don't patch.** Before writing,
+   a candidate must have **both** a `source_url` (the deep link) and a usable
+   hero image. Resolve the image from the task or the article's Open Graph /
+   Twitter card (`scripts/fetch-images.mjs` does the latter). **If no real image
+   resolves, reject the candidate and promote the next-highest-scoring story** —
+   never publish with a placeholder. Likewise reject anything missing
+   `source_url`.
+
+   The same rule applies to article copy quality. Generate the cliff-notes row
+   as a candidate, run the article validator against its `body` and `blurb`, and
+   reject the candidate if it fails because of scraper residue, ad/sponsor copy,
+   repeated copied text, malformed Markdown, or a broken card blurb. Do **not**
+   manually patch contaminated prose into shape. Promote the next ranked story
+   from the same category/source pool and keep trying until the category's quota
+   is filled or the eligible pool is exhausted. If the pool is exhausted, publish
+   fewer stories and log/report the shortfall explicitly.
 9. **Write.** For each survivor, write a cliff-notes `body` (the one generative
    step), set `headline`, `blurb`, `category_id`, `author`, `source_name` (the
    publisher), `source_url` (the canonical link), `published_at` (the source's
    real publish time) and the hero fields, then insert.
-10. **Editorial leads.** After inserting the day's batch, the task may choose the
+10. **Post-write validation repair.** After insert/build validation, if any newly
+   inserted row fails `scripts/validate-articles.mjs`, delete that row, record
+   the failure reason, and backfill from the next ranked candidate in the same
+   category. Re-run validation/build after every repair pass. Existing historic
+   rows that now fail validation should stop the run and be reported rather than
+   silently removed unless the run is explicitly doing a cleanup.
+11. **Editorial leads.** After inserting the day's batch, the task may choose the
     best lead story of the day (`featured = 1`) and one lead story per category
     (`category_featured = 1`). This is an editorial judgement call: prefer
     broadly important, useful, surprising, high-signal stories over merely the
