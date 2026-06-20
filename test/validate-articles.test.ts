@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasInlineMarkdownArtifacts, hasReadabilityRetentionIssues, validateArticleRows } from '../scripts/validate-articles.mjs';
+import { hasBlurbQualityIssues, hasInlineMarkdownArtifacts, hasReadabilityRetentionIssues, validateArticleRows } from '../scripts/validate-articles.mjs';
 
 describe('article body validation', () => {
   it('flags markdown headings and bullets that have been flattened into a paragraph', () => {
@@ -118,6 +118,79 @@ describe('article body validation', () => {
     ].join('\n');
 
     expect(hasReadabilityRetentionIssues(body)).toBe(true);
+  });
+
+  it('flags ad-copy contamination from sponsored video descriptions', () => {
+    const body = [
+      'If you want to skip the hassle of researching, buying, and building a gaming PC for yourself, buy one from one of Jawa’s Verified Sellers! Visit https://jawa.link/TechLinkedJune26 to get started.',
+      '',
+      '## The short version',
+      '',
+      '- Shadow AI tools can create unmanaged security and compliance risks inside companies.',
+      '',
+      '## Context',
+      '',
+      'The actual story should explain the risk without preserving the creator’s sponsor read.',
+    ].join('\n');
+
+    expect(hasReadabilityRetentionIssues(body)).toBe(true);
+  });
+
+  it('flags publisher newsletter and affiliate blocks copied into the article', () => {
+    const body = [
+      'The new smart light module expands a platform into ordinary switches.',
+      '',
+      '## The short version',
+      '',
+      '- If you buy something from a Verge link, Vox Media may earn a commission.',
+      '- Smart lighting company Philips Hue has launched its first wired wall modules.',
+      '',
+      '## Context',
+      '',
+      'Readers need the product news, not the publisher commerce disclosure.',
+    ].join('\n');
+
+    expect(hasReadabilityRetentionIssues(body)).toBe(true);
+  });
+
+  it('flags copied bullets that repeat the intro instead of adding a digest', () => {
+    const body = [
+      'Smart lighting company Philips Hue has launched its first wired wall modules. Installed behind existing wall switches, the new devices bring non-smart lights into the Hue ecosystem for the first time.',
+      '',
+      '## The short version',
+      '',
+      '- Smart lighting company Philips Hue has launched its first wired wall modules.',
+      '- Installed behind existing wall switches, the new devices bring non-smart lights into the Hue ecosystem for the first time.',
+      '',
+      '## Context',
+      '',
+      'The useful context belongs here after the non-repeated digest.',
+    ].join('\n');
+
+    expect(hasReadabilityRetentionIssues(body)).toBe(true);
+  });
+
+  it('flags broken teaser fragments that end mid-sentence', () => {
+    const body = [
+      'Telegram argues India should block specific content, not an entire platform used by',
+      '',
+      '## The short version',
+      '',
+      '- Telegram argues India should block specific content, not an entire platform used by',
+      '- A temporary ban pushed users toward VPNs and competing messaging apps.',
+      '',
+      '## What happened',
+      '',
+      'India temporarily cut off access to Telegram over exam-fraud concerns.',
+    ].join('\n');
+
+    expect(hasReadabilityRetentionIssues(body)).toBe(true);
+  });
+
+  it('flags broken or ad-contaminated card blurbs', () => {
+    expect(hasBlurbQualityIssues('Owners of affected iPhones can stop checking for patches now: the fix for this SecureROM bug comes in a new handset')).toBe(true);
+    expect(hasBlurbQualityIssues('If you want a gaming PC, buy one from a Jawa Verified Seller and visit https://jawa.link/TechLinkedJune26 to get started.')).toBe(true);
+    expect(hasBlurbQualityIssues('A security research team published a BootROM exploit affecting older iPhones, which means the vulnerable hardware cannot be fixed by a normal software update.')).toBe(false);
   });
 
   it('accepts concise articles where bullets briefly reinforce the intro without duplicating sections', () => {
