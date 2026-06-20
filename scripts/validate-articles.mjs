@@ -70,6 +70,16 @@ const BOILERPLATE_PATTERNS = [
   /\bget the biggest gaming news, reviews, and releases straight to your inbox\b/i,
   /\bbreaking space news, the latest updates on rocket launches\b/i,
   /\bread a sci-fi short story every month\b/i,
+  /\bwatch as\s+[^.?!]{10,}\b(?:unpack|discuss|explain|break down|talk through)\b/i,
+  /\bour regular weekly feature where we talk about the games we've been playing\b/i,
+  /\bwhat have you been playing\??$/i,
+  /\blike this guy[.!?…]?["')\]]?$/i,
+  /\bfrom disrupt[.!?…]?["')\]]?$/i,
+];
+
+const BROKEN_TEXT_PATTERNS = [
+  /\bcomes in a new handset[.!?…]?["')\]]?$/i,
+  /\b[a-z]\.["')\]]?$/,
 ];
 
 function normalizeReadableText(text) {
@@ -193,10 +203,20 @@ function hasEmptySections(body) {
   return Boolean(currentHeading && !currentHasContent);
 }
 
+export function hasHeadlineQualityIssues(headline) {
+  if (!headline || typeof headline !== 'string') return true;
+  const trimmed = headline.trim();
+  if (BOILERPLATE_PATTERNS.some((pattern) => pattern.test(trimmed))) return true;
+  if (BROKEN_TEXT_PATTERNS.some((pattern) => pattern.test(trimmed))) return true;
+  if (/\bon\s+famous$/i.test(trimmed)) return true;
+  return false;
+}
+
 export function hasBlurbQualityIssues(blurb) {
   if (!blurb || typeof blurb !== 'string') return true;
   const trimmed = blurb.trim();
   if (BOILERPLATE_PATTERNS.some((pattern) => pattern.test(trimmed))) return true;
+  if (BROKEN_TEXT_PATTERNS.some((pattern) => pattern.test(trimmed))) return true;
   if (!/[.!?…]["')\]]?$/.test(trimmed)) return true;
   if (hasBrokenTeaserFragments(trimmed)) return true;
   return false;
@@ -239,6 +259,14 @@ export function validateArticleRows(rows) {
         slug: row.slug,
         headline: row.headline,
         reason: 'body contains inline markdown markers or literal newline tags that will render as raw or malformed article text',
+      });
+    }
+
+    if (hasHeadlineQualityIssues(row.headline)) {
+      failures.push({
+        slug: row.slug,
+        headline: row.headline,
+        reason: 'headline fails the quality pass because it appears to be boilerplate or a broken teaser fragment',
       });
     }
 

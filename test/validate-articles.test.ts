@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasBlurbQualityIssues, hasInlineMarkdownArtifacts, hasReadabilityRetentionIssues, validateArticleRows } from '../scripts/validate-articles.mjs';
+import { hasBlurbQualityIssues, hasHeadlineQualityIssues, hasInlineMarkdownArtifacts, hasReadabilityRetentionIssues, validateArticleRows } from '../scripts/validate-articles.mjs';
 
 describe('article body validation', () => {
   it('flags markdown headings and bullets that have been flattened into a paragraph', () => {
@@ -189,8 +189,19 @@ describe('article body validation', () => {
 
   it('flags broken or ad-contaminated card blurbs', () => {
     expect(hasBlurbQualityIssues('Owners of affected iPhones can stop checking for patches now: the fix for this SecureROM bug comes in a new handset')).toBe(true);
+    expect(hasBlurbQualityIssues('Owners of affected iPhones can stop checking for patches now: the fix for this SecureROM bug comes in a new handset.')).toBe(true);
+    expect(hasBlurbQualityIssues('A stunningly concentrated galaxy cluster is challenging cosmic evolution theories, a team led by researchers f.')).toBe(true);
+    expect(hasBlurbQualityIssues('The study suggests that the very shape of space-time may protect the cosmological constant from disrupt.')).toBe(true);
+    expect(hasBlurbQualityIssues('Watch as Equity hosts unpack what the ban means for developers building on Anthropic\'s platform.')).toBe(true);
+    expect(hasBlurbQualityIssues('Our regular weekly feature where we talk about the games we\'ve been playing so you return in kind. What have you been playing?')).toBe(true);
+    expect(hasBlurbQualityIssues('People seem to love it or seem to be, you know, a little iffy on it, like this guy.')).toBe(true);
     expect(hasBlurbQualityIssues('If you want a gaming PC, buy one from a Jawa Verified Seller and visit https://jawa.link/TechLinkedJune26 to get started.')).toBe(true);
     expect(hasBlurbQualityIssues('A security research team published a BootROM exploit affecting older iPhones, which means the vulnerable hardware cannot be fixed by a normal software update.')).toBe(false);
+  });
+
+  it('flags headline fragments that end mid-phrase', () => {
+    expect(hasHeadlineQualityIssues('James Webb Space Telescope finds a salty surprise on famous')).toBe(true);
+    expect(hasHeadlineQualityIssues('New JWST images open up the cosmic noon frontier')).toBe(false);
   });
 
   it('accepts concise articles where bullets briefly reinforce the intro without duplicating sections', () => {
