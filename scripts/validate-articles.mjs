@@ -97,9 +97,25 @@ const AGENT_OUTPUT_PATTERNS = [
   /\bTODO:\b/i,
 ];
 
+const NON_SUMMARY_META_PATTERNS = [
+  /\bincluded here because\b/i,
+  /\bclears\s+NNN(?:'s)?\s+(?:source|image|attribution|.*checks?)\b/i,
+  /\bsource,\s*image\s+and\s+attribution\s+checks\b/i,
+  /\badds?\s+a\s+fresh\s+item\s+to\s+today(?:'s)?\s+[^.?!]{0,40}\s+queue\b/i,
+  /\bthe\s+point\s+of\s+this\s+digest\s+is\s+to\s+give\s+readers\b/i,
+  /\boriginal\s+link\s+below\b/i,
+  /^-\s*(?:source|section|published):\s+.+$/im,
+  /\bthe\s+original\s+report\s+focuses\s+on\b/i,
+];
+
 export function hasAgentOutputArtifacts(text) {
   if (!text || typeof text !== 'string') return false;
   return AGENT_OUTPUT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+export function hasNonSummaryMetaArtifacts(text) {
+  if (!text || typeof text !== 'string') return false;
+  return NON_SUMMARY_META_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 function normalizeReadableText(text) {
@@ -292,6 +308,14 @@ export function validateArticleRows(rows) {
         slug: row.slug,
         headline: row.headline,
         reason: 'article contains visible agent output, draft wording, or production instructions',
+      });
+    }
+
+    if (hasNonSummaryMetaArtifacts(combinedText)) {
+      failures.push({
+        slug: row.slug,
+        headline: row.headline,
+        reason: 'article contains non-summary meta text about NNN process, source checks, queues, or production rationale',
       });
     }
 

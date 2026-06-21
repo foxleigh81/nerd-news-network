@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasBlurbQualityIssues, hasHeadlineQualityIssues, hasInlineMarkdownArtifacts, hasReadabilityRetentionIssues, validateArticleRows } from '../scripts/validate-articles.mjs';
+import { hasBlurbQualityIssues, hasHeadlineQualityIssues, hasInlineMarkdownArtifacts, hasNonSummaryMetaArtifacts, hasReadabilityRetentionIssues, validateArticleRows } from '../scripts/validate-articles.mjs';
 
 describe('article body validation', () => {
   it('flags markdown headings and bullets that have been flattened into a paragraph', () => {
@@ -224,6 +224,68 @@ describe('article body validation', () => {
       slug: 'agent-draft',
       reason: expect.stringContaining('agent'),
     }));
+  });
+
+  it('flags visible NNN process rationale that is not article summary', () => {
+    const contaminated = [
+      'The original report focuses on Climate change boosts soybean production but worsens bean quality.',
+      'It adds a fresh item to today\'s science queue and is included here because it clears NNN\'s source, image and attribution checks.',
+      'The point of this digest is to give readers the shape of the story before they decide whether to open the source piece.',
+      '',
+      '## The short version',
+      '',
+      '- Source: Phys.org.',
+      '- Section: Science.',
+      '- Published: 2026-06-21.',
+      '- Original link below.',
+    ].join('\n');
+
+    expect(hasNonSummaryMetaArtifacts(contaminated)).toBe(true);
+
+    const failures = validateArticleRows([
+      {
+        slug: 'process-rationale-leak',
+        headline: 'Climate change boosts soybean production but worsens bean quality',
+        blurb: 'A study analyzed how carbon dioxide, high temperatures and drought affect soybean quality.',
+        body: contaminated,
+      },
+    ]);
+
+    expect(failures).toContainEqual(expect.objectContaining({
+      slug: 'process-rationale-leak',
+      reason: expect.stringContaining('non-summary meta text'),
+    }));
+  });
+
+  it('allows concise article summaries that mention the source without exposing NNN process', () => {
+    const body = [
+      'Phys.org reports that a study analyzed how carbon dioxide, high temperatures and drought affect soybean quality.',
+      '',
+      '## The short version',
+      '',
+      '- Climate change boosts soybean production but worsens bean quality.',
+      '- This affects how researchers interpret new evidence and open questions.',
+      '',
+      '## What happened',
+      '',
+      'The source article gives the main context behind this science development and the details readers need to understand the update.',
+      '',
+      '## Why it matters',
+      '',
+      'The practical science question is whether the result changes what researchers can test next or explain with confidence.',
+      '',
+      '> Summary by Nerd News Network. Read the full article at **Phys.org** via the links above and below.',
+    ].join('\n');
+
+    expect(hasNonSummaryMetaArtifacts(body)).toBe(false);
+    expect(validateArticleRows([
+      {
+        slug: 'clean-summary',
+        headline: 'Climate change boosts soybean production but worsens bean quality',
+        blurb: 'A study analyzed how carbon dioxide, high temperatures and drought affect soybean quality.',
+        body,
+      },
+    ])).toEqual([]);
   });
 
   it('flags source-page boilerplate copied into article bullets', () => {
