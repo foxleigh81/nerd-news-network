@@ -118,6 +118,21 @@ export function hasNonSummaryMetaArtifacts(text) {
   return NON_SUMMARY_META_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+const FINAL_BOSS_BOLLOCKS_PATTERNS = [
+  /\bthe\s+source\s+article\s+gives\s+the\s+main\s+context\b/i,
+  /\bdetails\s+readers\s+need\s+to\s+understand\s+the\s+update\b/i,
+  /\bthis\s+affects\s+how\b/i,
+  /\bthis\s+affects\s+(?:players|the\s+infrastructure|the\s+products|the\s+practical|connected-home)\b/i,
+  /\bthe\s+practical\s+(?:AI|networking|smart-home|gaming|science|technology)\s+question\s+is\s+whether\b/i,
+  /\bthe\s+important\s+question\s+is\b/i,
+  /\b(?:technology|science|gaming|AI|networking|smart-home)\s+development\s+and\s+the\s+details\b/i,
+];
+
+export function hasFinalBossBollocks(text) {
+  if (!text || typeof text !== 'string') return true;
+  return FINAL_BOSS_BOLLOCKS_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 function normalizeReadableText(text) {
   return String(text || '')
     .replace(/<[^>]+>/g, ' ')
@@ -316,6 +331,14 @@ export function validateArticleRows(rows) {
         slug: row.slug,
         headline: row.headline,
         reason: 'article contains non-summary meta text about NNN process, source checks, queues, or production rationale',
+      });
+    }
+
+    if (hasFinalBossBollocks(row.body)) {
+      failures.push({
+        slug: row.slug,
+        headline: row.headline,
+        reason: 'article fails final-boss reader-quality pass because it contains generic filler instead of article-specific summary',
       });
     }
 
