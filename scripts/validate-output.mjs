@@ -9,6 +9,8 @@ const __dirname = dirname(__filename);
 const ROOT = join(__dirname, '..');
 const DEFAULT_DB = join(ROOT, 'data', 'nnn.db');
 const DEFAULT_OUT = join(ROOT, 'out');
+const ADSENSE_PUBLISHER_ID = 'pub-2552028648847975';
+const EXPECTED_HOST = 'www.nerdnewsnetwork.com';
 
 const AGENT_OUTPUT_PATTERNS = [
   /\bhere(?:'s| is)\s+(?:the|an?)\s+(?:article|summary|draft)\b/i,
@@ -58,6 +60,43 @@ export function validateRenderedOutput({ outDir = DEFAULT_OUT, articleRows = [] 
 
   if (!existsSync(outDir)) {
     return [{ kind: 'missing-output-dir', path: outDir, message: `Output directory not found: ${outDir}` }];
+  }
+
+  const adsTxtPath = join(outDir, 'ads.txt');
+  if (!existsSync(adsTxtPath)) {
+    failures.push({
+      kind: 'missing-ads-txt',
+      path: 'ads.txt',
+      message: 'Rendered output is missing /ads.txt for AdSense crawler verification.',
+    });
+  } else {
+    const adsTxt = readFileSync(adsTxtPath, 'utf8');
+    if (!adsTxt.includes(`google.com, ${ADSENSE_PUBLISHER_ID}, DIRECT`)) {
+      failures.push({
+        kind: 'invalid-ads-txt',
+        path: 'ads.txt',
+        message: `/ads.txt does not authorize Google for ${ADSENSE_PUBLISHER_ID}.`,
+      });
+    }
+  }
+
+  const robotsPath = join(outDir, 'robots.txt');
+  if (existsSync(robotsPath)) {
+    const robotsTxt = readFileSync(robotsPath, 'utf8');
+    if (robotsTxt.includes('Host: http')) {
+      failures.push({
+        kind: 'invalid-robots-host',
+        path: 'robots.txt',
+        message: 'robots.txt Host must be a bare hostname, not a URL with a scheme.',
+      });
+    }
+    if (!robotsTxt.includes(`Sitemap: https://${EXPECTED_HOST}/sitemap.xml`)) {
+      failures.push({
+        kind: 'unexpected-sitemap-host',
+        path: 'robots.txt',
+        message: `robots.txt sitemap should point at the canonical www host (${EXPECTED_HOST}).`,
+      });
+    }
   }
 
   for (const row of articleRows) {
