@@ -1,5 +1,10 @@
 /** Site-wide configuration and constants. */
 
+const configuredSiteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || 'https://www.nerdnewsnetwork.com';
+const canonicalSiteUrl =
+  configuredSiteUrl === 'https://nerdnewsnetwork.com' ? 'https://www.nerdnewsnetwork.com' : configuredSiteUrl;
+
 export const SITE = {
   name: 'Nerd News Network',
   shortName: 'NNN',
@@ -7,7 +12,7 @@ export const SITE = {
   description:
     'Nerd News Network aggregates and summarises the day’s most important stories in technology, gaming, science, space, AI and culture — clearly, quickly and with credit to the original source.',
   // Used for absolute URLs in metadata, sitemaps and social cards.
-  url: process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || 'https://www.nerdnewsnetwork.com',
+  url: canonicalSiteUrl,
   locale: 'en_GB',
   // Default social handle (used for Twitter/X cards).
   social: {
