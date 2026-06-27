@@ -73,12 +73,14 @@ The database lives at `data/nnn.db`. The schema is created/owned by
 to INSERT/UPDATE rows** — it should never need to change the schema. Dates are
 **ISO 8601 UTC** strings, e.g. `2026-06-14T09:30:00Z`.
 
-> **Balance rule (site-wide).** Each daily run pulls the **same number of new
-> articles for every category** — one quota, `DAILY_PER_CATEGORY` (default 4),
-> applied equally to all six sections and shared across written sources and
-> YouTube. This keeps the whole site balanced over time. A category only falls
-> short when too few stories clear the validation gate that day; quotas are never
-> padded with filler. See the per-flow steps below.
+> **Daily candidate rule (site-wide).** Each daily run builds a deterministic,
+> ranked candidate queue from the curated written sources and YouTube channels.
+> It processes candidates in batches of `NNN_CANDIDATE_BATCH_SIZE` (default 60),
+> highest weighted/scored first, until more than 15 articles have cleared the
+> validation gate (`NNN_MIN_SUCCESS_ARTICLES`, default 16). It publishes at most
+> `NNN_MAX_PUBLISHED_ARTICLES` (default 25) and discards the rest. Quotas are
+> never padded with filler; if the candidate pool is exhausted before the success
+> gate, the run fails and reports diagnostics.
 
 ### `categories`
 
@@ -199,16 +201,13 @@ everything else is fixed rules:
 6. **Stable ordering.** Sort by `score` descending, breaking ties by
    `published_at` descending, then canonical URL ascending — so equal scores
    always resolve the same way.
-7. **Equal per-category quota + source cap.** Pull the **same number of new
-   articles for every category each day** — a single quota `DAILY_PER_CATEGORY`
-   (default **4**) applied identically to all six sections, so the site stays
-   balanced over time rather than skewing toward whichever topics happen to
-   publish most. Within a category, cap each source at **up to 2 articles per
-   day** so one feed can't fill the quota alone. If a category can't reach the
-   quota on a given day (too few stories clear the gate), take what qualifies —
-   equal **as much as possible**, never padded with filler. This per-category
-   budget is shared with the video flow below (written + video together count
-   toward the category's daily quota).
+7. **Global publish budget.** Process the deterministic candidate queue in
+   batches of 60 (`NNN_CANDIDATE_BATCH_SIZE`), always in score/weight order so
+   the most desired articles are attempted first. Keep going with the next batch
+   if the validation gate has not produced more than 15 publishable stories
+   (`NNN_MIN_SUCCESS_ARTICLES`, default 16). Stop once 25 articles have passed
+   (`NNN_MAX_PUBLISHED_ARTICLES`, default 25) and discard the rest; NNN should
+   publish a strong daily edition, not every possible qualifying item.
 8. **Hard validation gate + backfill — reject, don't patch.** Before writing,
    a candidate must have **both** a `source_url` (the deep link) and a usable
    hero image. Resolve the image from the task or the article's Open Graph /
@@ -222,9 +221,10 @@ everything else is fixed rules:
    reject the candidate if it fails because of scraper residue, ad/sponsor copy,
    repeated copied text, malformed Markdown, or a broken card blurb. Do **not**
    manually patch contaminated prose into shape. Promote the next ranked story
-   from the same category/source pool and keep trying until the category's quota
-   is filled or the eligible pool is exhausted. If the pool is exhausted, publish
-   fewer stories and log/report the shortfall explicitly.
+   from the deterministic queue and keep trying until the daily success gate is
+   reached or the eligible pool is exhausted. If the pool is exhausted before
+   more than 15 articles pass, fail the run and log/report the shortfall
+   explicitly.
 9. **Write.** For each survivor, write a cliff-notes `body` (the one generative
    step), set `headline`, `blurb`, `category_id`, `author`, `source_name` (the
    publisher), `source_url` (the canonical link), `published_at` (the source's
@@ -277,15 +277,10 @@ surfaced on the `/about` page under "Channels we follow".
    (same format as above), set `video_youtube_id`, `source_name` (the channel),
    `source_url` (the watch URL) and `category_id`, and insert the article.
 
-Process channels in `weight` order (highest first) so that when a section has
-more new videos than its quota, the top channels win — **Foxy's Lab (weight 10)
-always leads Smart Homes**.
-
-Videos count toward the **same per-category daily quota** as written articles
-(`DAILY_PER_CATEGORY`, default 4 — see the written-article flow). The task fills
-each category to the same target from its written sources and video channels
-combined, so every section gets an equal number of new items per day regardless
-of medium.
+Videos enter the same deterministic daily candidate queue as written articles.
+Process channels in `weight` order (highest first) so top channels are attempted
+first — **Foxy's Lab (weight 10) always leads Smart Homes** — then apply the
+same 60-candidate batch, >15 success gate, and 25-article publish cap.
 
 When `video_youtube_id` is set the article page embeds the player at the top in
 place of the hero image, the card shows a play badge, and the byline/credit read

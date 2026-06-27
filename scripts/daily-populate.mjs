@@ -7,7 +7,9 @@ import { validateArticleRows } from './validate-articles.mjs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const DB_PATH = join(ROOT, 'data', 'nnn.db');
-const DAILY_PER_CATEGORY = Number(process.env.DAILY_PER_CATEGORY || 4);
+const CANDIDATE_BATCH_SIZE = Number(process.env.NNN_CANDIDATE_BATCH_SIZE || 60);
+const MIN_SUCCESS_ARTICLES = Number(process.env.NNN_MIN_SUCCESS_ARTICLES || 16); // "greater than 15" gate.
+const MAX_PUBLISHED_ARTICLES = Number(process.env.NNN_MAX_PUBLISHED_ARTICLES || 25);
 const BUILD_DATE = process.env.NNN_BUILD_DATE ? new Date(process.env.NNN_BUILD_DATE) : new Date();
 const WINDOW_DAYS = Number(process.env.NNN_RECENCY_DAYS || 7);
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
@@ -56,22 +58,25 @@ function makeBlurb(title, summary, pageText) { const s = splitSentences(summary)
 
 const db = new Database(DB_PATH); db.pragma('foreign_keys = ON');
 const categories = db.prepare('SELECT * FROM categories ORDER BY id').all();
-const catById = Object.fromEntries(categories.map(c=>[c.id,c]));
-const sources = db.prepare('SELECT s.*, c.slug AS category_slug, c.keywords FROM sources s JOIN categories c ON c.id=s.category_id WHERE s.active=1 ORDER BY c.id, s.weight DESC, s.name').all();
-const youtubeChannels = db.prepare('SELECT ch.*, c.slug AS category_slug, c.keywords FROM youtube_channels ch JOIN categories c ON c.id=ch.category_id WHERE ch.active=1 ORDER BY c.id, ch.weight DESC, ch.name').all();
+const sources = db.prepare('SELECT s.*, c.slug AS category_slug, c.keywords FROM sources s JOIN categories c ON c.id=s.category_id WHERE s.active=1 ORDER BY s.weight DESC, c.id, s.name').all();
+const youtubeChannels = db.prepare('SELECT ch.*, c.slug AS category_slug, c.keywords FROM youtube_channels ch JOIN categories c ON c.id=ch.category_id WHERE ch.active=1 ORDER BY ch.weight DESC, c.id, ch.name').all();
 const existingUrls = new Set(db.prepare('SELECT source_url FROM articles WHERE source_url IS NOT NULL').all().map(r=>r.source_url));
 const existingVideoIds = new Set(db.prepare('SELECT video_youtube_id FROM articles WHERE video_youtube_id IS NOT NULL').all().map(r=>r.video_youtube_id));
 const startMaxId = db.prepare('SELECT COALESCE(MAX(id),0) AS id FROM articles').get().id;
+
+const todaysExisting = db.prepare("SELECT COUNT(*) AS n FROM articles WHERE date(created_at)=date('now')").get().n;
 const inserted = [];
+const processed = [];
 const diagnostics = [];
 
-for (const cat of categories) {
-  const todaysCount = db.prepare("SELECT COUNT(*) AS n FROM articles WHERE category_id=? AND date(created_at)=date('now')").get(cat.id).n;
-  let needed = Math.max(0, DAILY_PER_CATEGORY - todaysCount);
-  if (!needed) continue;
-  const candidates=[];
-  const perSourcePicked = new Map();
-  for (const source of sources.filter(s=>s.category_id===cat.id)) {
+function keywordsFor(categoryId) {
+  const cat = categories.find(c => c.id === categoryId);
+  return String(cat?.keywords || '').split(',').map(s=>s.trim()).filter(Boolean);
+}
+
+async function collectCandidates() {
+  const candidates = [];
+  for (const source of sources) {
     try {
       const xml = await fetchText(source.feed_url);
       for (const item of parseFeed(xml, source)) {
@@ -80,14 +85,15 @@ for (const cat of categories) {
         const age = ageDays(published); if (age < -1 || age > WINDOW_DAYS) continue;
         const hay = `${item.title} ${item.summary}`;
         const recency = Math.max(0, 10 - Math.floor(Math.max(0, age)) * 2);
-        const topic = hasKeyword(hay, String(cat.keywords||'').split(',').map(s=>s.trim()));
-        candidates.push({ kind:'article', source, title:item.title, url, published, summary:item.summary, score: recency + source.weight + topic });
+        const topic = hasKeyword(hay, keywordsFor(source.category_id));
+        candidates.push({ kind:'article', source, categoryId: source.category_id, category: source.category_slug, title:item.title, url, published, summary:item.summary, score: recency + source.weight + topic });
       }
-    } catch (e) { diagnostics.push(`${cat.slug}/${source.name}: feed ${e.message}`); }
+    } catch (e) { diagnostics.push(`${source.category_slug}/${source.name}: feed ${e.message}`); }
   }
-  for (const channel of youtubeChannels.filter(ch=>ch.category_id===cat.id)) {
+
+  for (const channel of youtubeChannels) {
     const feedUrl = youtubeFeedUrl(channel);
-    if (!feedUrl) { diagnostics.push(`${cat.slug}/${channel.name}: skipped no channel_id`); continue; }
+    if (!feedUrl) { diagnostics.push(`${channel.category_slug}/${channel.name}: skipped no channel_id`); continue; }
     try {
       const xml = await fetchText(feedUrl);
       for (const item of parseFeed(xml, channel)) {
@@ -98,39 +104,71 @@ for (const cat of categories) {
         const age = ageDays(published); if (age < -1 || age > WINDOW_DAYS) continue;
         const hay = `${item.title} ${item.summary}`;
         const recency = Math.max(0, 10 - Math.floor(Math.max(0, age)) * 2);
-        const topic = hasKeyword(hay, String(cat.keywords||'').split(',').map(s=>s.trim()));
-        candidates.push({ kind:'youtube', source: channel, title:item.title, url, published, summary:item.summary, score: recency + channel.weight + topic + 2, videoId, image:youtubeThumbnail(videoId, item.image) });
+        const topic = hasKeyword(hay, keywordsFor(channel.category_id));
+        candidates.push({ kind:'youtube', source: channel, categoryId: channel.category_id, category: channel.category_slug, title:item.title, url, published, summary:item.summary, score: recency + channel.weight + topic + 2, videoId, image:youtubeThumbnail(videoId, item.image) });
       }
-    } catch (e) { diagnostics.push(`${cat.slug}/${channel.name}: youtube feed ${e.message}`); }
+    } catch (e) { diagnostics.push(`${channel.category_slug}/${channel.name}: youtube feed ${e.message}`); }
   }
-  candidates.sort((a,b)=> b.score-a.score || new Date(b.published)-new Date(a.published) || a.url.localeCompare(b.url));
-  for (const cand of candidates) {
-    if (needed <= 0) break;
-    const used = perSourcePicked.get(cand.source.id) || 0; if (used >= 2) continue;
-    try {
-      let img = null;
-      let pageText = '';
-      if (cand.kind === 'youtube') {
-        img = cand.image ? { url: cand.image, alt: `Thumbnail for “${cand.title}”.` } : null;
-      } else {
-        const html = await fetchText(cand.url);
-        img = extractOgImage(html, cand.url);
-        pageText = extractArticleText(html);
-        const htmlTitle = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
-        if (!cand.title || cand.title.length <= 8) cand.title = htmlTitle ? stripHtml(htmlTitle) : cand.title;
-      }
-      if (!img?.url) { diagnostics.push(`${cat.slug}/${cand.title}: rejected no hero image`); continue; }
-      const title = cand.title && cand.title.length > 8 ? cand.title : null;
-      if (!title) continue;
-      if ((cand.summary + pageText).length < 160) { diagnostics.push(`${cat.slug}/${title}: rejected insufficient text`); continue; }
-      let slug = slugify(title); let base = slug; let n=2; while (db.prepare('SELECT 1 FROM articles WHERE slug=?').get(slug)) slug = `${base}-${n++}`;
-      const row = { slug, headline: title.slice(0,180), blurb: makeBlurb(title,cand.summary,pageText), body: cand.kind === 'youtube' ? makeVideoBody({title,sourceName:cand.source.name,summary:cand.summary}) : makeBody({title,sourceName:cand.source.name,summary:cand.summary,pageText}), hero_image: img.url, hero_image_alt: (img.alt || `Lead image for “${title}”.`).slice(0,280), hero_credit: `Image: ${cand.source.name}`, thumbnail_image: img.url, thumbnail_alt: (img.alt || `Thumbnail image for “${title}”.`).slice(0,280), category_id: cat.id, author:'NNN Staff', source_name:cand.source.name, source_url:cand.url, video_youtube_id: cand.videoId || null, published_at:cand.published };
-      const fails = validateArticleRows([row]); if (fails.length) { diagnostics.push(`${cat.slug}/${title}: validation ${fails.map(f=>f.reason).join('; ')}`); continue; }
-      const info = db.prepare(`INSERT INTO articles (slug, headline, blurb, body, hero_image, hero_image_alt, hero_credit, thumbnail_image, thumbnail_alt, category_id, author, source_name, source_url, video_youtube_id, published_at) VALUES (@slug,@headline,@blurb,@body,@hero_image,@hero_image_alt,@hero_credit,@thumbnail_image,@thumbnail_alt,@category_id,@author,@source_name,@source_url,@video_youtube_id,@published_at)`).run(row);
-      inserted.push({ id: info.lastInsertRowid, category: cat.slug, source: cand.source.name, title }); existingUrls.add(cand.url); if (row.video_youtube_id) existingVideoIds.add(row.video_youtube_id); perSourcePicked.set(cand.source.id, used+1); needed--;
-    } catch (e) { diagnostics.push(`${cat.slug}/${cand.title}: article ${e.message}`); }
+
+  candidates.sort((a,b)=>
+    b.score-a.score ||
+    (b.source.weight || 0)-(a.source.weight || 0) ||
+    new Date(b.published)-new Date(a.published) ||
+    a.category.localeCompare(b.category) ||
+    a.url.localeCompare(b.url)
+  );
+  return candidates;
+}
+
+async function processCandidate(cand) {
+  try {
+    let img = null;
+    let pageText = '';
+    if (cand.kind === 'youtube') {
+      img = cand.image ? { url: cand.image, alt: `Thumbnail for “${cand.title}”.` } : null;
+    } else {
+      const html = await fetchText(cand.url);
+      img = extractOgImage(html, cand.url);
+      pageText = extractArticleText(html);
+      const htmlTitle = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
+      if (!cand.title || cand.title.length <= 8) cand.title = htmlTitle ? stripHtml(htmlTitle) : cand.title;
+    }
+    if (!img?.url) return { ok:false, reason:'rejected no hero image' };
+    const title = cand.title && cand.title.length > 8 ? cand.title : null;
+    if (!title) return { ok:false, reason:'rejected missing title' };
+    if ((cand.summary + pageText).length < 160) return { ok:false, reason:'rejected insufficient text' };
+    let slug = slugify(title); let base = slug; let n=2; while (db.prepare('SELECT 1 FROM articles WHERE slug=?').get(slug)) slug = `${base}-${n++}`;
+    const row = { slug, headline: title.slice(0,180), blurb: makeBlurb(title,cand.summary,pageText), body: cand.kind === 'youtube' ? makeVideoBody({title,sourceName:cand.source.name,summary:cand.summary}) : makeBody({title,sourceName:cand.source.name,summary:cand.summary,pageText}), hero_image: img.url, hero_image_alt: (img.alt || `Lead image for “${title}”.`).slice(0,280), hero_credit: `Image: ${cand.source.name}`, thumbnail_image: img.url, thumbnail_alt: (img.alt || `Thumbnail image for “${title}”.`).slice(0,280), category_id: cand.categoryId, author:'NNN Staff', source_name:cand.source.name, source_url:cand.url, video_youtube_id: cand.videoId || null, published_at:cand.published };
+    const fails = validateArticleRows([row]);
+    if (fails.length) return { ok:false, reason:`validation ${fails.map(f=>f.reason).join('; ')}` };
+    const info = db.prepare(`INSERT INTO articles (slug, headline, blurb, body, hero_image, hero_image_alt, hero_credit, thumbnail_image, thumbnail_alt, category_id, author, source_name, source_url, video_youtube_id, published_at) VALUES (@slug,@headline,@blurb,@body,@hero_image,@hero_image_alt,@hero_credit,@thumbnail_image,@thumbnail_alt,@category_id,@author,@source_name,@source_url,@video_youtube_id,@published_at)`).run(row);
+    existingUrls.add(cand.url); if (row.video_youtube_id) existingVideoIds.add(row.video_youtube_id);
+    return { ok:true, article:{ id: info.lastInsertRowid, category: cand.category, source: cand.source.name, title } };
+  } catch (e) {
+    return { ok:false, reason:`article ${e.message}` };
   }
-  if (needed > 0) diagnostics.push(`${cat.slug}: shortfall ${needed}/${DAILY_PER_CATEGORY}`);
+}
+
+const candidates = await collectCandidates();
+let cursor = 0;
+while (todaysExisting + inserted.length < MAX_PUBLISHED_ARTICLES && cursor < candidates.length) {
+  const batch = candidates.slice(cursor, cursor + CANDIDATE_BATCH_SIZE);
+  cursor += CANDIDATE_BATCH_SIZE;
+  for (const cand of batch) {
+    if (todaysExisting + inserted.length >= MAX_PUBLISHED_ARTICLES) break;
+    const result = await processCandidate(cand);
+    processed.push({ category: cand.category, source: cand.source.name, title: cand.title, score: cand.score, ok: result.ok, reason: result.reason });
+    if (result.ok) inserted.push(result.article);
+  }
+  if (todaysExisting + inserted.length >= MIN_SUCCESS_ARTICLES) break;
+}
+
+if (todaysExisting + inserted.length < MIN_SUCCESS_ARTICLES) {
+  diagnostics.push(`success gate failed: ${todaysExisting + inserted.length}/${MIN_SUCCESS_ARTICLES} publishable articles after processing ${processed.length}/${candidates.length} candidates`);
+  process.exitCode = 1;
+}
+if (todaysExisting + inserted.length >= MAX_PUBLISHED_ARTICLES && cursor < candidates.length) {
+  diagnostics.push(`publish cap reached: kept ${MAX_PUBLISHED_ARTICLES}, discarded remaining ranked candidates`);
 }
 
 function editorialLeads() {
@@ -149,5 +187,5 @@ function editorialLeads() {
   }
 }
 editorialLeads();
-console.log(JSON.stringify({ inserted, insertedCount: inserted.length, startMaxId, diagnostics: diagnostics.slice(-80) }, null, 2));
+console.log(JSON.stringify({ inserted, insertedCount: inserted.length, todaysExisting, publishedToday: todaysExisting + inserted.length, successGate: { minimum: MIN_SUCCESS_ARTICLES, passed: todaysExisting + inserted.length >= MIN_SUCCESS_ARTICLES }, candidateBatchSize: CANDIDATE_BATCH_SIZE, processedCount: processed.length, candidateCount: candidates.length, diagnostics: diagnostics.slice(-120), rejectedSample: processed.filter(p=>!p.ok).slice(-25) }, null, 2));
 db.close();
