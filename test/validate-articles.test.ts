@@ -325,6 +325,60 @@ describe('article body validation', () => {
     ])).toEqual([]);
   });
 
+  it('flags duplicated publisher promo bullets shared by unrelated articles', () => {
+    const failures = validateArticleRows([
+      {
+        slug: 'ai-coding-startup',
+        headline: 'AI coding startup raises a large Series A',
+        source_name: 'Example Source',
+        created_at: '2026-06-30T08:00:00Z',
+        blurb: 'A coding startup raised new money for enterprise software tools.',
+        body: [
+          'A coding startup raised new money for enterprise software tools.',
+          '',
+          '## The short version',
+          '',
+          '- A publisher promo block about executive events was copied into the article summary.',
+          '- A second unrelated marketing sentence also appeared in the generated bullet list.',
+          '- The startup says enterprise controls are part of the product.',
+          '',
+          '## Why it matters',
+          '',
+          'The actual story is about enterprise AI coding tools, not TechCrunch event marketing.',
+        ].join('\n'),
+      },
+      {
+        slug: 'gemini-images',
+        headline: 'Gemini personalized images reach free users',
+        source_name: 'Example Source',
+        created_at: '2026-06-30T08:00:00Z',
+        blurb: 'Gemini can now use connected Google apps to personalize image prompts for free users.',
+        body: [
+          'Gemini can now use connected Google apps to personalize image prompts for free users.',
+          '',
+          '## The short version',
+          '',
+          '- A publisher promo block about executive events was copied into the article summary.',
+          '- A second unrelated marketing sentence also appeared in the generated bullet list.',
+          '- Users can opt in before Gemini accesses personal app data.',
+          '',
+          '## Why it matters',
+          '',
+          'The actual story is about personalized AI image generation, not TechCrunch event marketing.',
+        ].join('\n'),
+      },
+    ]);
+
+    expect(failures).toContainEqual(expect.objectContaining({
+      slug: 'ai-coding-startup',
+      reason: expect.stringContaining('shares multiple bullet points'),
+    }));
+    expect(failures).toContainEqual(expect.objectContaining({
+      slug: 'gemini-images',
+      reason: expect.stringContaining('shares multiple bullet points'),
+    }));
+  });
+
   it('flags source-page boilerplate copied into article bullets', () => {
     const failures = validateArticleRows([
       {

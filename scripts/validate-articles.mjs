@@ -10,6 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const DEFAULT_DB = join(__dirname, '..', 'data', 'nnn.db');
 const DB_PATH = process.env.NNN_DB_PATH || DEFAULT_DB;
+const MAX_PUBLISHED_ARTICLES = Number(process.env.NNN_MAX_PUBLISHED_ARTICLES || 25);
 
 /**
  * Detect Markdown structure that was flattened into a plain paragraph.
@@ -214,6 +215,54 @@ function hasContainedBlockRepeats(body) {
   return false;
 }
 
+function articleBullets(body) {
+  return structuredBlocks(body)
+    .filter((block) => block.type === 'bullet')
+    .map((block) => normalizeReadableText(block.text))
+    .filter((text) => wordList(text).length >= 6);
+}
+
+function sharedBulletFailures(rows) {
+  const failures = [];
+  const byScopeAndBullet = new Map();
+
+  for (const row of rows) {
+    // Repeated bullets are only meaningful as a same-run/same-source smell. Older
+    // historical rows can legitimately share generic one-line bullets across
+    // unrelated sources, so keep this guard scoped to the ingestion batch shape.
+    const scopeDate = String(row.created_at || '').slice(0, 10);
+    const sourceName = String(row.source_name || '').trim().toLowerCase();
+    if (!scopeDate || !sourceName) continue;
+    const scope = `${scopeDate}\t${sourceName}`;
+    for (const bullet of new Set(articleBullets(row.body))) {
+      const key = `${scope}\t${bullet}`;
+      if (!byScopeAndBullet.has(key)) byScopeAndBullet.set(key, []);
+      byScopeAndBullet.get(key).push(row);
+    }
+  }
+
+  const sharedBySlug = new Map();
+  for (const [key, bulletRows] of byScopeAndBullet) {
+    if (bulletRows.length < 2) continue;
+    for (const row of bulletRows) {
+      if (!sharedBySlug.has(row.slug)) sharedBySlug.set(row.slug, new Set());
+      sharedBySlug.get(row.slug).add(key);
+    }
+  }
+
+  for (const [slug, bullets] of sharedBySlug) {
+    if (bullets.size < 2) continue;
+    const row = rows.find((candidate) => candidate.slug === slug);
+    failures.push({
+      slug,
+      headline: row?.headline,
+      reason: 'article shares multiple bullet points with another article from the same source run, usually copied publisher boilerplate rather than article-specific summary',
+    });
+  }
+
+  return failures;
+}
+
 function hasBrokenTeaserFragments(body) {
   const fragments = bodyBlocks(body);
   const danglingEnding = /\b(?:a|an|the|to|of|for|with|without|and|or|but|from|by|in|on|at|as|than|that|which|who|used by|powered by|held by|back by|founded|founded just|just three years|so far|up to|based on|because|while|when|where|after|before|into|over|under|new handset)$/i;
@@ -314,7 +363,7 @@ export function hasReadabilityRetentionIssues(body) {
 }
 
 export function validateArticleRows(rows) {
-  const failures = [];
+  const failures = rows.length <= MAX_PUBLISHED_ARTICLES ? [...sharedBulletFailures(rows)] : [];
 
   for (const row of rows) {
     const combinedText = [row.headline, row.blurb, row.body].filter(Boolean).join('\n');
@@ -410,7 +459,7 @@ async function main() {
 
   const db = new Database(DB_PATH);
   ensureImageQualityColumns(db);
-  const rows = db.prepare('SELECT id, slug, headline, blurb, body, hero_image, thumbnail_image, source_url FROM articles ORDER BY published_at DESC, id DESC').all();
+  const rows = db.prepare('SELECT id, slug, headline, blurb, body, hero_image, thumbnail_image, source_url, source_name, created_at FROM articles ORDER BY published_at DESC, id DESC').all();
   const contentFailures = validateArticleRows(rows);
   const imageFindings = await validateAndScoreImages(db, rows);
   const strictImages = process.argv.includes('--strict-images');
