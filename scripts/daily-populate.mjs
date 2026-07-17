@@ -11,6 +11,7 @@ const CANDIDATE_BATCH_SIZE = Number(process.env.NNN_CANDIDATE_BATCH_SIZE || 60);
 const MIN_SUCCESS_ARTICLES = Number(process.env.NNN_MIN_SUCCESS_ARTICLES || 16); // "greater than 15" gate.
 const MAX_PUBLISHED_ARTICLES = Number(process.env.NNN_MAX_PUBLISHED_ARTICLES || 25);
 const BUILD_DATE = process.env.NNN_BUILD_DATE ? new Date(process.env.NNN_BUILD_DATE) : new Date();
+const BUILD_DATE_KEY = BUILD_DATE.toISOString().slice(0, 10);
 const WINDOW_DAYS = Number(process.env.NNN_RECENCY_DAYS || 7);
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const TRACKING = new Set(['fbclid','gclid','dclid','mc_cid','mc_eid','igshid','ref','ref_src']);
@@ -22,6 +23,10 @@ function attr(tag, name) { const m = tag.match(new RegExp(`${name}\\s*=\\s*["'](
 function slugify(s) { return s.toLowerCase().replace(/[’']/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80); }
 function canonicalize(raw) { try { const u = new URL(decode(raw)); u.hash = ''; u.hostname = u.hostname.toLowerCase(); for (const k of [...u.searchParams.keys()]) if (k.toLowerCase().startsWith('utm_') || TRACKING.has(k.toLowerCase())) u.searchParams.delete(k); return u.toString(); } catch { return null; } }
 function iso(d) { const x = new Date(d); return Number.isFinite(x.getTime()) ? x.toISOString().replace(/\.\d{3}Z$/,'Z') : null; }
+function buildCreatedAt() {
+  const now = new Date().toISOString().replace(/\.\d{3}Z$/,'Z');
+  return `${BUILD_DATE_KEY}${now.slice(10)}`;
+}
 function ageDays(date) { return (BUILD_DATE.getTime() - new Date(date).getTime()) / 86400000; }
 function hasKeyword(text, keywords) { const low = text.toLowerCase(); return keywords.filter(k => k && low.includes(k.toLowerCase())).length; }
 function splitSentences(text) { return stripHtml(text).replace(/\s+/g,' ').split(/(?<=[.!?])\s+(?=[A-Z0-9"“])/).map(s => s.trim()).filter(s => s.length > 35 && s.length < 260); }
@@ -102,7 +107,7 @@ const existingUrls = new Set(db.prepare('SELECT source_url FROM articles WHERE s
 const existingVideoIds = new Set(db.prepare('SELECT video_youtube_id FROM articles WHERE video_youtube_id IS NOT NULL').all().map(r=>r.video_youtube_id));
 const startMaxId = db.prepare('SELECT COALESCE(MAX(id),0) AS id FROM articles').get().id;
 
-const todaysExisting = db.prepare("SELECT COUNT(*) AS n FROM articles WHERE date(created_at)=date('now')").get().n;
+const todaysExisting = db.prepare('SELECT COUNT(*) AS n FROM articles WHERE date(created_at)=?').get(BUILD_DATE_KEY).n;
 const inserted = [];
 const processed = [];
 const diagnostics = [];
@@ -176,12 +181,12 @@ async function processCandidate(cand) {
     if (!title) return { ok:false, reason:'rejected missing title' };
     if ((cand.summary + pageText).length < 160) return { ok:false, reason:'rejected insufficient text' };
     let slug = slugify(title); let base = slug; let n=2; while (db.prepare('SELECT 1 FROM articles WHERE slug=?').get(slug)) slug = `${base}-${n++}`;
-    const row = { slug, headline: title.slice(0,180), blurb: makeBlurb(title,cand.summary,pageText), body: cand.kind === 'youtube' ? makeVideoBody({title,sourceName:cand.source.name,summary:cand.summary}) : makeBody({title,sourceName:cand.source.name,summary:cand.summary,pageText}), hero_image: img.url, hero_image_alt: (img.alt || `Lead image for “${title}”.`).slice(0,280), hero_credit: `Image: ${cand.source.name}`, thumbnail_image: img.url, thumbnail_alt: (img.alt || `Thumbnail image for “${title}”.`).slice(0,280), category_id: cand.categoryId, author:'NNN Staff', source_name:cand.source.name, source_url:cand.url, video_youtube_id: cand.videoId || null, published_at:cand.published };
-    const validationRow = { ...row, created_at: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') };
-    const peerRows = db.prepare("SELECT slug, headline, blurb, body, source_name, created_at FROM articles WHERE date(created_at)=date('now') AND source_name=?").all(row.source_name);
+    const row = { slug, headline: title.slice(0,180), blurb: makeBlurb(title,cand.summary,pageText), body: cand.kind === 'youtube' ? makeVideoBody({title,sourceName:cand.source.name,summary:cand.summary}) : makeBody({title,sourceName:cand.source.name,summary:cand.summary,pageText}), hero_image: img.url, hero_image_alt: (img.alt || `Lead image for “${title}”.`).slice(0,280), hero_credit: `Image: ${cand.source.name}`, thumbnail_image: img.url, thumbnail_alt: (img.alt || `Thumbnail image for “${title}”.`).slice(0,280), category_id: cand.categoryId, author:'NNN Staff', source_name:cand.source.name, source_url:cand.url, video_youtube_id: cand.videoId || null, published_at:cand.published, created_at: buildCreatedAt() };
+    const validationRow = { ...row };
+    const peerRows = db.prepare('SELECT slug, headline, blurb, body, source_name, created_at FROM articles WHERE date(created_at)=? AND source_name=?').all(BUILD_DATE_KEY, row.source_name);
     const fails = validateArticleRows([...peerRows, validationRow]);
     if (fails.length) return { ok:false, reason:`validation ${fails.map(f=>f.reason).join('; ')}` };
-    const info = db.prepare(`INSERT INTO articles (slug, headline, blurb, body, hero_image, hero_image_alt, hero_credit, thumbnail_image, thumbnail_alt, category_id, author, source_name, source_url, video_youtube_id, published_at) VALUES (@slug,@headline,@blurb,@body,@hero_image,@hero_image_alt,@hero_credit,@thumbnail_image,@thumbnail_alt,@category_id,@author,@source_name,@source_url,@video_youtube_id,@published_at)`).run(row);
+    const info = db.prepare(`INSERT INTO articles (slug, headline, blurb, body, hero_image, hero_image_alt, hero_credit, thumbnail_image, thumbnail_alt, category_id, author, source_name, source_url, video_youtube_id, published_at, created_at) VALUES (@slug,@headline,@blurb,@body,@hero_image,@hero_image_alt,@hero_credit,@thumbnail_image,@thumbnail_alt,@category_id,@author,@source_name,@source_url,@video_youtube_id,@published_at,@created_at)`).run(row);
     existingUrls.add(cand.url); if (row.video_youtube_id) existingVideoIds.add(row.video_youtube_id);
     return { ok:true, article:{ id: info.lastInsertRowid, category: cand.category, source: cand.source.name, title } };
   } catch (e) {
@@ -214,7 +219,7 @@ if (todaysExisting + inserted.length >= MAX_PUBLISHED_ARTICLES && cursor < candi
 function editorialLeads() {
   db.exec('UPDATE articles SET featured=0, category_featured=0');
   const smart = db.prepare("SELECT id FROM categories WHERE slug='smart-homes'").get();
-  const localDate = new Date().toLocaleDateString('en-CA');
+  const localDate = BUILD_DATE_KEY;
   const foxy = db.prepare("SELECT a.* FROM articles a WHERE a.source_name = 'Foxy''s Lab' AND date(a.published_at)=? ORDER BY a.published_at DESC, a.id DESC LIMIT 1").get(localDate);
   const scoreExpr = `(CASE WHEN image_quality_status IN ('front-page','usable','unscored') THEN 20 ELSE 0 END) + (CASE WHEN source_name LIKE '%Ars%' OR source_name LIKE '%MIT%' OR source_name LIKE '%Quanta%' OR source_name LIKE '%Foxy%' THEN 5 ELSE 0 END)`;
   const front = foxy || db.prepare(`SELECT * FROM articles WHERE published_at >= datetime('now','-14 days') ORDER BY ${scoreExpr} DESC, published_at DESC, id DESC LIMIT 1`).get() || db.prepare('SELECT * FROM articles ORDER BY published_at DESC LIMIT 1').get();
