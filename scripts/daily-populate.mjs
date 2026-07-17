@@ -42,19 +42,54 @@ function parseFeed(xml, source) { const items = [];
 function youtubeFeedUrl(channel) { return channel.channel_id ? `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channel.channel_id)}` : null; }
 function youtubeVideoId(url) { try { return new URL(url).searchParams.get('v'); } catch { return null; } }
 function youtubeThumbnail(videoId, fallback) { return videoId ? `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` : fallback; }
-function makeBody({title, sourceName, summary, pageText}) { const sentences = [...splitSentences(summary), ...splitSentences(pageText)]; const unique=[]; for (const s of sentences) { const c=cleanSentence(s); if (!unique.some(u => u.toLowerCase() === c.toLowerCase())) unique.push(c); if (unique.length >= 7) break; }
-  const intro = unique[0] || `${title} is the latest update from ${sourceName}.`;
-  const bullets = unique.slice(1,5); while (bullets.length < 3) bullets.push(`${sourceName} frames the update around ${title.toLowerCase().replace(/[.!?]$/,'')}.`);
-  const context = unique.slice(5,7);
-  const why = context[0] || bullets[0];
-  return `${intro}\n\n## The short version\n\n${bullets.map(b=>`- ${b}`).join('\n')}\n\n## What happened\n\n${cleanSentence(unique[1] || intro)} ${cleanSentence(unique[2] || bullets[0])}\n\n## Why it matters\n\n${cleanSentence(why)}\n\n> Summary by Nerd News Network. Read the full article at **${sourceName}** via the links above and below.\n`;
+function makeBody({title, sourceName, summary, pageText}) {
+  const sentences = [...splitSentences(summary), ...splitSentences(pageText)];
+  const unique=[];
+  for (const s of sentences) {
+    const c=cleanSentence(s);
+    if (!unique.some(u => u.toLowerCase() === c.toLowerCase())) unique.push(c);
+    if (unique.length >= 8) break;
+  }
+
+  const titleStem = title.toLowerCase().replace(/[.!?]$/,'');
+  const fallback = [
+    `${sourceName} says ${titleStem} is the central development readers should understand.`,
+    `The update adds fresh detail around ${titleStem} rather than relying on a generic announcement.`,
+    `For NNN readers, the useful bit is how ${titleStem} changes the immediate story in this beat.`,
+  ];
+  const next = (fallbackIndex = 0) => unique.shift() || fallback[fallbackIndex % fallback.length];
+
+  const intro = next(0);
+  const bullets = [next(1), next(2), next(0)];
+  const happened = [next(1), next(2)].map(cleanSentence).join(' ');
+  const why = cleanSentence(next(0));
+
+  return `${intro}\n\n## The short version\n\n${bullets.map(b=>`- ${b}`).join('\n')}\n\n## What happened\n\n${happened}\n\n## Why it matters\n\n${why}\n\n> Summary by Nerd News Network. Read the full article at **${sourceName}** via the links above and below.\n`;
 }
 function cleanVideoSummary(summary='') { const kept=[]; for (const raw of String(summary).split(/\n+/)) { const line = raw.trim(); if (!line) continue; if (/^(#|---|my links:?|gear \+ stuff|support the channel|disclaimer:?)/i.test(line)) break; if (/\b(discord|patreon|affiliate links|use code|t-?shirt|credits depending on the tier)\b/i.test(line)) continue; kept.push(line.replace(/https?:\/\/\S+/g,'').trim()); } return kept.join(' '); }
-function makeVideoBody({title, sourceName, summary}) { const unique=[]; for (const s of splitSentences(cleanVideoSummary(summary))) { const c=cleanSentence(s.replace(/#\S+/g,'').trim()); if (c.length > 45 && !/\b(linked below|description|affiliate|discord|patreon|support me)\b/i.test(c) && !unique.some(u => u.toLowerCase() === c.toLowerCase())) unique.push(c); if (unique.length >= 6) break; }
-  const intro = unique[0] || `${sourceName} has published a new video: ${title}.`;
-  const bullets = unique.slice(1,4); while (bullets.length < 3) bullets.push(`${sourceName} uses the video to focus on ${title.toLowerCase().replace(/[.!?]$/,'')}.`);
-  const watch = unique[4] || `The practical takeaway is to use the video as a buying and setup guide, then compare the recommended devices against your own smart-home needs.`;
-  const context = unique[5] || `For NNN readers, the useful bit is the concrete product framing rather than another abstract smart-home standards argument.`;
+function makeVideoBody({title, sourceName, summary}) {
+  const unique=[];
+  for (const s of splitSentences(cleanVideoSummary(summary))) {
+    const c=cleanSentence(s.replace(/#\S+/g,'').trim());
+    if (c.length > 45 && !/\b(linked below|description|affiliate|discord|patreon|support me)\b/i.test(c) && !unique.some(u => u.toLowerCase() === c.toLowerCase())) unique.push(c);
+    if (unique.length >= 6) break;
+  }
+
+  const titleStem = title.toLowerCase().replace(/[.!?]$/,'');
+  const fallback = [
+    `${sourceName} has published a new video about ${titleStem}.`,
+    `The episode focuses on the practical details behind ${titleStem}.`,
+    `The useful watch is the hands-on framing rather than a generic product announcement.`,
+    `Viewers should look for the specific examples and trade-offs shown in the footage.`,
+    `For NNN readers, the value is seeing how ${titleStem} plays out in a real creator workflow.`,
+    `The clip is worth checking against the original source before making any buying or setup decisions.`,
+  ];
+  const next = (fallbackIndex = 0) => unique.shift() || fallback[fallbackIndex % fallback.length];
+
+  const intro = next(0);
+  const bullets = [next(1), next(2), next(3)];
+  const watch = next(4);
+  const context = next(5);
   return `${intro}\n\n## The short version\n\n${bullets.map(b=>`- ${b}`).join('\n')}\n\n## What to watch for\n\n${watch}\n\n## Why it matters\n\n${context}\n\n> Summary by Nerd News Network. Watch the full video at **${sourceName}** via the links above and below.\n`;
 }
 function makeBlurb(title, summary, pageText) { const s = splitSentences(summary)[0] || splitSentences(pageText)[0] || `${title} is a notable update worth catching up on.`; return cleanSentence(s).slice(0, 260).replace(/[,;:]?\s*$/,'') + (/[.!?…]$/.test(s.slice(0,260)) ? '' : '.'); }
