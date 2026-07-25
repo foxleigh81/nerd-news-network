@@ -36,7 +36,7 @@
     "better-sqlite3": "^11.8.1",
     "marked": "^15.0.6",
     "sanitize-html": "^2.14.0",
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.0",
     "typescript": "^5.7.3",
     "vitest": "^4.1.9"
   },
