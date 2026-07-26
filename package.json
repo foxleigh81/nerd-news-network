@@ -23,7 +23,7 @@
     "images:force": "node scripts/fetch-images.mjs --force"
   },
   "dependencies": {
-    "next": "^15.5.19",
+    "next": "^15.5.21",
     "react": "19.0.0",
     "react-dom": "19.0.0"
   },
