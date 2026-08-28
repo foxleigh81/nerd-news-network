@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasBlurbQualityIssues, hasFinalBossBollocks, hasHeadlineQualityIssues, hasInlineMarkdownArtifacts, hasNonSummaryMetaArtifacts, hasReadabilityRetentionIssues, validateArticleRows } from '../scripts/validate-articles.mjs';
+import { hasBlurbQualityIssues, hasFinalBossBollocks, hasHeadlineQualityIssues, hasInlineMarkdownArtifacts, hasNonSummaryMetaArtifacts, hasReadabilityRetentionIssues, isShortFormYouTubeArticle, validateArticleRows } from '../scripts/validate-articles.mjs';
 
 describe('article body validation', () => {
   it('flags markdown headings and bullets that have been flattened into a paragraph', () => {
@@ -202,6 +202,43 @@ describe('article body validation', () => {
   it('flags headline fragments that end mid-phrase', () => {
     expect(hasHeadlineQualityIssues('James Webb Space Telescope finds a salty surprise on famous')).toBe(true);
     expect(hasHeadlineQualityIssues('New JWST images open up the cosmic noon frontier')).toBe(false);
+  });
+
+  it('rejects YouTube Shorts while accepting normal watch-page videos', () => {
+    expect(isShortFormYouTubeArticle({
+      headline: 'The secret to better 5G speeds #networking #tech #shorts',
+      source_url: 'https://www.youtube.com/shorts/elReW93A71Q',
+      body: 'A brief vertical clip should not become a daily NNN article.',
+    })).toBe(true);
+    expect(isShortFormYouTubeArticle({
+      headline: 'A full networking lab walkthrough',
+      source_url: 'https://www.youtube.com/watch?v=aWTyj4iv4QM',
+      body: 'A long-form video walkthrough with enough context for a summary.',
+    })).toBe(false);
+
+    const failures = validateArticleRows([{
+      slug: 'shorts-5g-speeds',
+      headline: 'The secret to better 5G speeds #networking #tech #shorts',
+      blurb: 'A short vertical clip is not suitable for the daily article feed.',
+      body: [
+        'A short vertical clip is not suitable for the daily article feed.',
+        '',
+        '## The short version',
+        '',
+        '- The item is a YouTube Short rather than a long-form source.',
+        '',
+        '## Why it matters',
+        '',
+        'The daily feed should use sources with enough context for a proper summary.',
+      ].join('\n'),
+      source_url: 'https://www.youtube.com/shorts/elReW93A71Q',
+    }]);
+    expect(failures).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slug: 'shorts-5g-speeds',
+        reason: expect.stringContaining('YouTube Shorts'),
+      }),
+    ]));
   });
 
   it('flags visible agent output and draft instructions in article text', () => {

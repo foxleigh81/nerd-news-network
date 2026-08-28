@@ -334,6 +334,12 @@ export function hasBlurbQualityIssues(blurb) {
   return false;
 }
 
+export function isShortFormYouTubeArticle(row) {
+  const sourceUrl = String(row?.source_url || '');
+  const combinedText = [row?.headline, row?.blurb, row?.body].filter(Boolean).join('\n');
+  return /\/shorts\//i.test(sourceUrl) || /(?:^|\s)#shorts?\b/i.test(combinedText);
+}
+
 export function hasReadabilityRetentionIssues(body) {
   if (!body || typeof body !== 'string') return false;
 
@@ -412,6 +418,14 @@ export function validateArticleRows(rows) {
         slug: row.slug,
         headline: row.headline,
         reason: 'blurb fails the quality pass because it contains ad boilerplate or a broken teaser sentence',
+      });
+    }
+
+    if (isShortFormYouTubeArticle(row)) {
+      failures.push({
+        slug: row.slug,
+        headline: row.headline,
+        reason: 'YouTube Shorts and other short-form videos are not valid NNN article sources',
       });
     }
 

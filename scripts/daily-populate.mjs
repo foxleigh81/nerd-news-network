@@ -46,6 +46,9 @@ function parseFeed(xml, source) { const items = [];
 }
 function youtubeFeedUrl(channel) { return channel.channel_id ? `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channel.channel_id)}` : null; }
 function youtubeVideoId(url) { try { return new URL(url).searchParams.get('v'); } catch { return null; } }
+function isShortFormYouTube({ url = '', title = '', summary = '' } = {}) {
+  return /\/shorts\//i.test(String(url)) || /(?:^|\s)#shorts?\b/i.test(`${title} ${summary}`);
+}
 function youtubeThumbnail(videoId, fallback) { return videoId ? `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` : fallback; }
 function makeBody({title, sourceName, summary, pageText}) {
   const sentences = [...splitSentences(summary), ...splitSentences(pageText)];
@@ -143,6 +146,7 @@ async function collectCandidates() {
         const videoId = item.videoId || youtubeVideoId(item.link);
         const url = canonicalize(item.link);
         if (!videoId || !url || existingVideoIds.has(videoId) || existingUrls.has(url)) continue;
+        if (isShortFormYouTube({ url, title: item.title, summary: item.summary })) continue;
         const published = iso(item.published || BUILD_DATE); if (!published) continue;
         const age = ageDays(published); if (age < -1 || age > WINDOW_DAYS) continue;
         const hay = `${item.title} ${item.summary}`;
