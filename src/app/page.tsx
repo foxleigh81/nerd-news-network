@@ -1,12 +1,13 @@
 import { currentMonth, getArticlesForMonth } from '@/lib/db';
 import { formatMonth } from '@/lib/format';
 import { FeedView } from '@/components/FeedView';
-import { PER_PAGE } from '@/lib/site';
 
 export default function HomePage() {
   const { year, month } = currentMonth();
-  // withLead: page 1 carries a featured lead on top of a full 12-card grid.
-  const { items, total, page, totalPages } = getArticlesForMonth(year, month, 1, PER_PAGE, true);
+  // Static export currently chokes on the top-level /page/[page] route, so keep
+  // the current edition fully reachable from the homepage and leave historical
+  // pagination to the archive routes.
+  const { items, total, page } = getArticlesForMonth(year, month, 1, 60, true);
 
   return (
     <FeedView
@@ -16,9 +17,9 @@ export default function HomePage() {
       articles={items}
       page={page}
       total={total}
-      totalPages={totalPages}
+      totalPages={1}
       showLead
-      hrefFor={(p) => (p === 1 ? '/' : `/page/${p}`)}
+      hrefFor={() => '/'}
       paginationLabel="Front page pagination"
     />
   );
