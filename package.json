@@ -23,7 +23,7 @@
     "images:force": "node scripts/fetch-images.mjs --force"
   },
   "dependencies": {
-    "next": "^15.5.19",
+    "next": "^15.5.25",
     "react": "19.0.0",
     "react-dom": "19.0.0"
   },
@@ -36,7 +36,7 @@
     "better-sqlite3": "^11.8.1",
     "marked": "^15.0.6",
     "sanitize-html": "^2.14.0",
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.4",
     "typescript": "^5.7.3",
     "vitest": "^4.1.9"
   },
