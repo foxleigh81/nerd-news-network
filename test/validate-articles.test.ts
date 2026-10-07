@@ -196,11 +196,15 @@ describe('article body validation', () => {
     expect(hasBlurbQualityIssues('Our regular weekly feature where we talk about the games we\'ve been playing so you return in kind. What have you been playing?')).toBe(true);
     expect(hasBlurbQualityIssues('People seem to love it or seem to be, you know, a little iffy on it, like this guy.')).toBe(true);
     expect(hasBlurbQualityIssues('If you want a gaming PC, buy one from a Jawa Verified Seller and visit https://jawa.link/TechLinkedJune26 to get started.')).toBe(true);
+    expect(hasBlurbQualityIssues('WOLFBOX Anniversary Sale, UP TO 26% OFF!')).toBe(true);
+    expect(hasBlurbQualityIssues('ArsPro gives you more ways to read while directly supporting our journalism.')).toBe(true);
     expect(hasBlurbQualityIssues('A security research team published a BootROM exploit affecting older iPhones, which means the vulnerable hardware cannot be fixed by a normal software update.')).toBe(false);
+    expect(hasBlurbQualityIssues('Reader support helped fund the investigation, which uncovered a security flaw affecting millions of devices.')).toBe(false);
   });
 
-  it('flags headline fragments that end mid-phrase', () => {
+  it('flags headline fragments and publisher membership promotions', () => {
     expect(hasHeadlineQualityIssues('James Webb Space Telescope finds a salty surprise on famous')).toBe(true);
+    expect(hasHeadlineQualityIssues('Support Ars and get a better reading experience in return')).toBe(true);
     expect(hasHeadlineQualityIssues('New JWST images open up the cosmic noon frontier')).toBe(false);
   });
 

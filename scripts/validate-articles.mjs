@@ -81,6 +81,9 @@ const BOILERPLATE_PATTERNS = [
   /\bwhat have you been playing\??$/i,
   /\blike this guy[.!?…]?["')\]]?$/i,
   /\bfrom disrupt[.!?…]?["')\]]?$/i,
+  /\banniversary sale\b.{0,50}\bup to\s+\d+%\s+off\b/i,
+  /\bsupport ars\b.{0,80}\breading experience\b/i,
+  /\bdirectly supporting our journalism\b/i,
 ];
 
 const BROKEN_TEXT_PATTERNS = [
