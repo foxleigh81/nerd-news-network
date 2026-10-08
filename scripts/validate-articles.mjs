@@ -60,6 +60,9 @@ const BOILERPLATE_PATTERNS = [
 
   // Commerce / sponsor copy should never be preserved as NNN article prose.
   /#sponsored\b/i,
+  /\[\s*sponsored\s*\]/i,
+  /^\s*sponsored\s*:/i,
+  /\bpaid\s+promotion\b/i,
   /\bsponsor(?:ed|ing)?\s+(?:this|the)\s+(?:video|post|article)\b/i,
   /\bget\s+[$£€]?\d+[\w% ]{0,24}\s+off\b/i,
   /\bvisit\s+https?:\/\/\S+\s+(?:for\s+more\s+info|to\s+get\s+started)\b/i,

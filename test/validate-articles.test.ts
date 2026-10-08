@@ -205,7 +205,11 @@ describe('article body validation', () => {
   it('flags headline fragments and publisher membership promotions', () => {
     expect(hasHeadlineQualityIssues('James Webb Space Telescope finds a salty surprise on famous')).toBe(true);
     expect(hasHeadlineQualityIssues('Support Ars and get a better reading experience in return')).toBe(true);
+    expect(hasHeadlineQualityIssues('Inside Galactic Racer: The Tech Behind The Arcade Revival [Sponsored]')).toBe(true);
+    expect(hasHeadlineQualityIssues('Sponsored: A closer look at a new gaming monitor')).toBe(true);
+    expect(hasHeadlineQualityIssues('This video is a paid promotion for a gaming headset')).toBe(true);
     expect(hasHeadlineQualityIssues('New JWST images open up the cosmic noon frontier')).toBe(false);
+    expect(hasHeadlineQualityIssues('Industry-sponsored research maps battery degradation')).toBe(false);
   });
 
   it('rejects YouTube Shorts while accepting normal watch-page videos', () => {
