@@ -1,0 +1,4 @@
+# Every path is owned by Alex. With the "Foxtail protection" ruleset's
+# require_code_owner_review, only Alex's approval counts towards a merge, so a
+# Foxtail Engineering bot approval can never satisfy review (foxys-lab-ai-brain #32, S4).
+* @foxleigh81
