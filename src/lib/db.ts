@@ -271,3 +271,17 @@ export function getRelatedArticles(article: Article, limit = RELATED_LIMIT): Art
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Edition status (served as /status.json so the publisher can confirm a deploy).
+// ---------------------------------------------------------------------------
+export function getEditionStatus(): { lastEdition: string | null; articles: number; totalArticles: number } {
+  const row = db()
+    .prepare(
+      `SELECT date(created_at) AS d, COUNT(*) AS n FROM articles
+       WHERE created_at IS NOT NULL GROUP BY d ORDER BY d DESC LIMIT 1`,
+    )
+    .get() as { d: string; n: number } | undefined;
+  const total = db().prepare(`SELECT COUNT(*) AS n FROM articles`).get() as { n: number };
+  return { lastEdition: row?.d ?? null, articles: row?.n ?? 0, totalArticles: total.n };
+}
